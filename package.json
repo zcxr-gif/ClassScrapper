@@ -24,6 +24,7 @@
     "axios-cookiejar-support": "^5.0.2",
     "cheerio": "^1.0.0-rc.12",
     "express": "^4.19.2",
+    "node-cron": "^3.0.3",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tough-cookie": "^4.1.4"
