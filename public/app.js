@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => { 
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
   const coursesContainer = document.getElementById('courses-container');
@@ -170,7 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     courses.forEach(course => {
-      // Extract the course number from the courseName (e.g., "ANT 100")
       const courseNumberMatch = course.courseName.match(/\d{3}/);
       const courseNumber = courseNumberMatch ? courseNumberMatch[0] : "";
 
@@ -191,12 +190,16 @@ document.addEventListener('DOMContentLoaded', () => {
           <p class="mt-1 font-medium">Instructor: ${course.instructor}</p>
           <div class="mt-2 space-y-1">${scheduleInfo}</div>
         </div>
-        <div class="mt-4">
+        <div class="mt-4 flex flex-col gap-2">
           <button 
             class="details-btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
             data-term="${termSelect.value}" data-crn="${course.crn}">
             View Details
           </button>
+          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank"
+             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg w-full text-center">
+             Sign Up in OASIS
+          </a>
         </div>
       `;
       coursesContainer.appendChild(card);
@@ -254,6 +257,12 @@ document.addEventListener('DOMContentLoaded', () => {
           <p><span class="font-semibold">Credits:</span> ${details.credits}</p>
         </div>
         <div class="flex gap-4">${seats}${waitlist}</div>
+      </div>
+      <div class="mt-4">
+        <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank"
+           class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg inline-block">
+           Sign Up in OASIS
+        </a>
       </div>
     `;
     modal.classList.remove('hidden');
