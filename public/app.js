@@ -12,17 +12,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let termsData = [];
 
-  // --- Subject mapping (code → full name) ---
+  // --- Hardcoded Subject mapping (code → full name) ---
   const subjectMap = {
-    BIO: "Biology",
     ANT: "Anthropology",
-    CHEM: "Chemistry",
-    ENG: "English",
-    MAT: "Mathematics",
+    ARC: "Architectural Technology",
+    ART: "Art History",
+    AIM: "Artificial Intelligence Mgmt",
+    AET: "Automotive Technology",
+    AVN: "Aviation",
+    BIO: "Biology",
+    BUS: "Business",
+    CHM: "Chemistry",
+    CHI: "Chinese",
+    CIV: "Civil Engineering Technology",
     CSC: "Computer Science",
+    CPS: "Computer Security Technology",
+    BCS: "Computer Systems",
+    CON: "Construction Management",
+    CRJ: "Criminal Justice",
+    DEN: "Dental Hygiene",
+    ECO: "Economics",
+    EET: "Electrical Engineering Tech",
+    ETM: "Engineering Technology Mngmnt",
+    EGL: "English",
+    ENV: "Environmental Studies",
+    FYE: "First Year Experience",
+    FRE: "French",
+    FRX: "Freshman Experience",
+    GIS: "Geographic Information Systems",
+    GEO: "Geography",
+    GER: "German",
+    GRO: "Gerontology",
+    HPW: "Health Promotion and Wellness",
+    HIS: "History",
+    HON: "Honors Program",
+    HOR: "Horticulture",
+    HUM: "Humanities",
+    IND: "Industrial Technology",
+    IXD: "Interaction Design",
+    ITA: "Italian",
+    MTH: "Mathematics",
+    MET: "Mechanical Engineering Tech",
+    MLS: "Medical Laboratory Science",
+    MLG: "Modern Languages",
+    NUR: "Nursing",
+    NTR: "Nutrition Science",
+    PHI: "Philosophy",
+    PED: "Physical Education",
+    PHY: "Physics and Physical Science",
+    POL: "Politics",
+    PCM: "Professional Communications",
     PSY: "Psychology",
+    RAM: "Research Aligned Mentorship",
+    RUS: "Russian",
+    STS: "Science, Tech and Society",
+    SST: "Security Systems Technology",
     SOC: "Sociology",
-    // ➕ Add more as needed
+    SPA: "Spanish",
+    SPE: "Speech",
+    SMT: "Sport Management",
+    THE: "Theatre",
+    VIS: "Visual Communications"
   };
 
   // --- Dark mode persistence ---
@@ -87,9 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateSubjects(subjects) {
     subjectSelect.innerHTML = '<option value="">Select a Subject</option>';
     subjects.forEach(code => {
+      const fullName = subjectMap[code] || code;
       const option = document.createElement('option');
       option.value = code;
-      const fullName = subjectMap[code] || "Unknown Subject";
       option.textContent = `${code} – ${fullName}`;
       subjectSelect.appendChild(option);
     });
@@ -178,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let seats = details.seats?.capacity
       ? `
-        <div>
+        <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
           <p class="font-semibold">Seats</p>
           <p>Total: ${details.seats.capacity}</p>
           <p>Taken: ${details.seats.actual}</p>
@@ -188,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let waitlist = details.waitlist?.capacity
       ? `
-        <div>
+        <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
           <p class="font-semibold">Waitlist</p>
           <p>Total: ${details.waitlist.capacity}</p>
           <p>Taken: ${details.waitlist.actual}</p>
@@ -197,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
       : `<div><p class="font-semibold">Waitlist</p><p>Not available</p></div>`;
 
     modalBody.innerHTML = `
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div>
           <p><span class="font-semibold">Term:</span> ${details.associatedTerm}</p>
           <p><span class="font-semibold">Levels:</span> ${details.levels}</p>
