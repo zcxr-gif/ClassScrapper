@@ -6,31 +6,43 @@
   <title>Farmingdale Class Finder</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Enable dark mode in Tailwind
-    tailwind.config = {
-      darkMode: 'class'
-    };
+    tailwind.config = { darkMode: 'class' };
   </script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex flex-col text-gray-800 dark:text-gray-200">
 
   <!-- Header -->
-  <header class="bg-blue-700 dark:bg-blue-900 text-white shadow-lg">
-    <div class="container mx-auto py-6 px-4 flex justify-between items-center">
-      <div class="text-center flex-1">
+  <header class="bg-blue-700 dark:bg-blue-900 text-white shadow-lg sticky top-0 z-40">
+    <div class="container mx-auto py-4 px-4 flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4">
+      <div class="flex-1 text-center md:text-left">
         <h1 class="text-3xl font-bold">Farmingdale State College</h1>
         <p class="text-lg opacity-90">Class Finder</p>
       </div>
-      <!-- Dark Mode Toggle -->
-      <button id="dark-toggle" class="ml-4 px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition">
-        🌙
-      </button>
+      <div class="flex gap-2 md:gap-4 items-center">
+        <!-- Dark Mode Toggle -->
+        <button id="dark-toggle" class="px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition">
+          🌙
+        </button>
+      </div>
     </div>
   </header>
 
+  <!-- Floating Bookmarks Button -->
+  <button id="show-bookmarks" class="fixed top-4 left-4 z-50 bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-2 rounded-lg shadow-md">
+    ★ Bookmarks
+  </button>
+
+  <!-- Bookmarks Panel -->
+  <div id="bookmarks-panel" class="fixed top-16 left-4 z-50 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-lg shadow-md hidden w-64 max-h-[80vh] overflow-auto">
+    <h3 class="font-bold mb-2">Bookmarked Courses</h3>
+    <ul id="bookmarks-list" class="space-y-1"></ul>
+    <button id="close-bookmarks" class="mt-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded-lg w-full">Close</button>
+  </div>
+
   <!-- Controls -->
   <main class="container mx-auto px-4 py-6 flex-1">
-    <div class="flex flex-col md:flex-row gap-4 mb-6">
+    <div class="flex flex-col md:flex-row gap-4 mb-4">
+      <!-- Term & Subject Selects -->
       <div class="flex-1">
         <label for="term-select" class="block font-semibold mb-1">Select a Term</label>
         <select id="term-select" disabled class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm p-2">
@@ -43,6 +55,39 @@
           <option>Select a term first</option>
         </select>
       </div>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="flex flex-col md:flex-row gap-2 mb-6 items-center">
+      <input type="text" id="course-search" placeholder="Search by course name, instructor, or CRN" 
+             class="flex-1 p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm focus:outline-none">
+      
+      <select id="filter-type" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
+        <option value="">All Types</option>
+        <option value="online">Online</option>
+        <option value="inperson">In-person</option>
+      </select>
+
+      <select id="filter-level" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
+        <option value="">All Levels</option>
+        <option value="1">100-level</option>
+        <option value="2">200-level</option>
+        <option value="3">300-level</option>
+        <option value="4">400-level</option>
+      </select>
+
+      <select id="filter-availability" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
+        <option value="">Any Availability</option>
+        <option value="open">Open</option>
+        <option value="full">Full</option>
+      </select>
+
+      <select id="sort-courses" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
+        <option value="">Sort By</option>
+        <option value="courseNumber">Course Number</option>
+        <option value="instructor">Instructor</option>
+        <option value="seatsRemaining">Seats Remaining</option>
+      </select>
     </div>
 
     <!-- Loading Spinner -->
