@@ -3,58 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Farmingdale State College - Class Scraper</title>
+    <title>Farmingdale Course Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
-        <h1>Farmingdale State College - Class Scraper</h1>
+        <div class="container">
+            <h1>Farmingdale Course Finder</h1>
+            <p>A modern way to browse and find classes.</p>
+        </div>
     </header>
 
-    <main>
-        <div class="controls">
+    <main class="container">
+        <section class="controls-wrapper">
             <div class="select-container">
-                <label for="term-select">Select a Term:</label>
+                <label for="term-select">Select Term</label>
                 <select id="term-select" disabled>
-                    <option>Loading terms...</option>
+                    <option>Loading...</option>
                 </select>
             </div>
             <div class="select-container">
-                <label for="subject-select">Select a Subject:</label>
+                <label for="subject-select">Select Subject</label>
                 <select id="subject-select" disabled>
                     <option>Select a term first</option>
                 </select>
             </div>
+        </section>
+
+        <section id="courses-container">
+            </section>
+
+        <div id="loading-message" class="hidden">
+             <div class="spinner"></div>
+             <p>Fetching courses, please wait...</p>
+        </div>
+        
+        <div id="initial-message">
+            <p>Please select a term and subject to see available courses.</p>
         </div>
 
-        <div id="courses-container">
-            <table id="courses-table">
-                <thead>
-                    <tr>
-                        <th>CRN</th>
-                        <th>Course Name</th>
-                        <th>Section</th>
-                        <th>Instructor</th>
-                        <th>Schedule</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody id="courses-tbody">
-                </tbody>
-            </table>
-            <div id="loading-message" class="hidden">
-                <p>Loading courses...</p>
-            </div>
-        </div>
     </main>
-
-    <div id="details-modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2 id="modal-title">Course Details</h2>
-            <div id="modal-body"></div>
-        </div>
-    </div>
 
     <script src="app.js"></script>
 </body>
