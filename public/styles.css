@@ -1,254 +1,109 @@
-/* Modern CSS Reset */
-*, *::before, *::after {
-    box-sizing: border-box;
+body {
+    font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-}
-
-/* CSS Variables for theming */
-:root {
-    --primary-color: #004a99;
-    --primary-hover: #003366;
-    --light-gray: #f8f9fa;
-    --medium-gray: #e9ecef;
-    --dark-gray: #6c757d;
-    --text-color: #212529;
-    --card-bg: #ffffff;
-    --shadow: 0 4px 12px rgba(0,0,0,0.08);
-    --border-radius: 8px;
-
-    /* Status Colors */
-    --status-open-bg: #28a745;
-    --status-full-bg: #dc3545;
-    --status-waitlist-bg: #ffc107;
-    --status-waitlist-text: #212529;
-}
-
-body {
-    font-family: 'Roboto', sans-serif;
-    background-color: var(--light-gray);
-    color: var(--text-color);
-    line-height: 1.6;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 1.5rem;
+    background-color: #f4f4f4;
 }
 
 header {
-    background: var(--primary-color);
+    background-color: #004a99;
     color: white;
-    padding: 2rem 0;
+    padding: 1rem;
     text-align: center;
-    margin-bottom: 2rem;
 }
 
-header h1 {
-    font-weight: 700;
-    font-size: 2.5rem;
+main {
+    padding: 1rem;
 }
 
-header p {
-    font-weight: 300;
-    opacity: 0.9;
-}
-
-.controls-wrapper {
+.controls {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    background: var(--card-bg);
-    padding: 1.5rem;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-}
-
-.select-container {
-    flex: 1;
-    min-width: 250px;
-}
-
-.select-container label {
-    display: block;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-}
-
-select {
-    width: 100%;
-    padding: 0.75rem;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--medium-gray);
-    background-color: #fff;
-    font-size: 1rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-select:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(0, 74, 153, 0.2);
-}
-
-/* Course Cards Layout */
-#courses-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 1.5rem;
-}
-
-.course-card {
-    background: var(--card-bg);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    border: 1px solid transparent;
-}
-
-.course-card.active {
-    border-color: var(--primary-color);
-    box-shadow: 0 8px 20px rgba(0,74,153,0.15);
-}
-
-.card-main {
-    padding: 1.5rem;
-    cursor: pointer;
-}
-
-.card-header {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    gap: 1rem;
     margin-bottom: 1rem;
 }
 
-.card-header h3 {
-    font-size: 1.25rem;
-    font-weight: 500;
-}
-
-.course-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.9rem;
-    color: var(--dark-gray);
-}
-
-.course-info span {
-    margin-right: 1rem;
-}
-
-.course-info .crn {
-    font-weight: 700;
-}
-
-/* --- New Status Tags --- */
-.status-tag, .modality-tag {
-    display: inline-block;
-    padding: 0.25em 0.6em;
-    font-size: 0.8rem;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-    vertical-align: baseline;
-    border-radius: 0.25rem;
-    color: #fff;
-}
-
-.status-tag {
-    background-color: var(--dark-gray); /* Default */
-}
-.status-open { background-color: var(--status-open-bg); }
-.status-full { background-color: var(--status-full-bg); }
-.status-waitlist {
-    background-color: var(--status-waitlist-bg);
-    color: var(--status-waitlist-text);
-}
-
-.modality-online { background-color: #00796b; } /* Darker Green */
-.modality-in-person { background-color: #17a2b8; } /* Teal */
-
-.card-body p {
-    margin-bottom: 0.75rem;
-}
-
-.card-body strong {
-    color: #343a40;
-}
-
-.schedule-list {
-    list-style: none;
-    font-size: 0.9rem;
-    padding-left: 0.5rem;
-    border-left: 2px solid var(--medium-gray);
-}
-.schedule-list li {
-    margin-bottom: 0.25rem;
-}
-
-/* --- Expandable Details Section --- */
-.card-details {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.4s ease-out, padding 0.4s ease-out;
-    background: var(--light-gray);
-    font-size: 0.9rem;
-    padding: 0 1.5rem; /* No padding when collapsed */
-}
-
-.course-card.active .card-details {
-    max-height: 500px; /* Animate to this height */
-    padding: 1.5rem; /* Add padding when expanded */
-    border-top: 1px solid var(--medium-gray);
-}
-
-.details-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.details-grid p {
-    margin: 0;
-}
-
-
-/* Messages and Loaders */
-#initial-message, #loading-message {
-    text-align: center;
-    padding: 3rem;
-    color: var(--dark-gray);
-}
-
-#loading-message {
+.select-container {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
 }
 
-.spinner {
-    border: 4px solid var(--medium-gray);
-    border-top: 4px solid var(--primary-color);
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
+select {
+    padding: 0.5rem;
+    border-radius: 5px;
+    border: 1px solid #ccc;
 }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+#courses-container {
+    background-color: white;
+    padding: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#courses-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#courses-table th, #courses-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+#courses-table th {
+    background-color: #f2f2f2;
+}
+
+.details-btn {
+    padding: 0.5rem 1rem;
+    background-color: #004a99;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.details-btn:hover {
+    background-color: #003366;
 }
 
 .hidden {
     display: none;
+}
+
+.modal {
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 600px;
+    border-radius: 5px;
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
 }
