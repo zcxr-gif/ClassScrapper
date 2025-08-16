@@ -28,6 +28,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const closeBookmarksBtn = bookmarksPanel.querySelector('#close-bookmarks');
 
+  // Floating watched courses panel
+  let watchedPanel = document.getElementById('watched-panel');
+  if (!watchedPanel) {
+    watchedPanel = document.createElement('div');
+    watchedPanel.id = 'watched-panel';
+    watchedPanel.className = 'fixed bottom-4 left-4 z-50 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-lg shadow-md w-72 max-h-[60vh] overflow-auto hidden';
+    watchedPanel.innerHTML = `
+      <h3 class="font-bold mb-2">Watched Courses</h3>
+      <ul id="watched-list" class="space-y-1"></ul>
+      <button id="close-watched" class="mt-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded-lg w-full">Close</button>
+    `;
+    document.body.appendChild(watchedPanel);
+  }
+  const watchedList = watchedPanel.querySelector('#watched-list');
+  const closeWatchedBtn = watchedPanel.querySelector('#close-watched');
+
   // Optional search/filter/sort elements
   const searchInput = document.getElementById('course-search');
   const sortSelect = document.getElementById('sort-courses');
@@ -37,8 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let termsData = [];
   let allCourses = [];
+  let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+  let watchedCourses = []; // Stores watched CRNs
 
-  // Subject mapping and colors
   const subjectMap = {
     ANT: 'Anthropology', ARC: 'Architectural Technology', ART: 'Art History',
     AIM: 'Artificial Intelligence Mgmt', AVN: 'Aviation', BIO: 'Biology',
@@ -50,9 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('theme') === 'dark') {
     root.classList.add('dark');
     darkToggle.textContent = "☀️";
-  } else {
-    darkToggle.textContent = "🌙";
-  }
+  } else darkToggle.textContent = "🌙";
+
   darkToggle.addEventListener('click', () => {
     root.classList.toggle('dark');
     localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
@@ -137,15 +153,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-
     courses.forEach(course => {
       const courseNumberMatch = course.courseName.match(/\d{3}/);
       const courseNumber = courseNumberMatch ? courseNumberMatch[0] : "";
-      const scheduleInfo = course.schedule.map(s => {
+      const scheduleInfo = course.schedule?.map(s => {
         const location = s.where.toUpperCase().includes("ONLINE") ? "Online" : `In-person @ ${s.where}`;
         return `<p class="text-sm text-gray-600 dark:text-gray-400">${s.days} ${s.time} • ${location}</p>`;
-      }).join("");
+      }).join("") || '';
 
       const seatsPercent = course.seats ? (course.seats.actual / course.seats.capacity) * 100 : 0;
       const seatsColor = seatsPercent > 80 ? 'bg-red-500' : seatsPercent > 50 ? 'bg-yellow-400' : 'bg-green-500';
@@ -179,35 +193,53 @@ document.addEventListener('DOMContentLoaded', () => {
                   data-crn="${course.crn}">
             ${bookmarks.includes(course.crn) ? '★ Bookmarked' : '☆ Bookmark'}
           </button>
+          <button class="watch-btn ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'} text-white px-4 py-2 rounded-lg w-full"
+                  data-crn="${course.crn}" data-term="${termSelect.value}">
+            ${watchedCourses.includes(course.crn) ? 'Watching' : 'Watch'}
+          </button>
         </div>
       `;
       coursesContainer.appendChild(card);
     });
   }
 
-  // --- Event delegation for course cards ---
+  // --- Event delegation ---
   coursesContainer.addEventListener('click', event => {
     if (event.target.classList.contains('details-btn')) {
       fetchCourseDetails(termSelect.value, event.target.dataset.crn);
     }
-    if (event.target.classList.contains('bookmark-btn')) {
-      toggleBookmark(event.target);
-    }
+    if (event.target.classList.contains('bookmark-btn')) toggleBookmark(event.target);
+    if (event.target.classList.contains('watch-btn')) toggleWatch(event.target);
   });
 
   function toggleBookmark(button) {
     const crn = button.dataset.crn;
-    let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
     if (bookmarks.includes(crn)) bookmarks = bookmarks.filter(b => b !== crn);
     else bookmarks.push(crn);
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
 
-    // Update button appearance
     button.classList.toggle('bg-yellow-500', bookmarks.includes(crn));
     button.classList.toggle('bg-gray-300', !bookmarks.includes(crn));
     button.textContent = bookmarks.includes(crn) ? '★ Bookmarked' : '☆ Bookmark';
-
     updateBookmarksPanel();
+  }
+
+  function toggleWatch(button) {
+    const term = button.dataset.term;
+    const crn = button.dataset.crn;
+    const isWatching = watchedCourses.includes(crn);
+
+    fetch(`/watch/${term}/${crn}`, { method: isWatching ? 'DELETE' : 'POST' })
+      .then(res => res.json())
+      .then(() => {
+        if (isWatching) watchedCourses = watchedCourses.filter(c => c !== crn);
+        else watchedCourses.push(crn);
+        button.textContent = isWatching ? 'Watch' : 'Watching';
+        button.classList.toggle('bg-blue-500', !isWatching);
+        button.classList.toggle('bg-gray-300', isWatching);
+        updateWatchedPanel();
+      })
+      .catch(err => console.error('Error toggling watch:', err));
   }
 
   // --- Bookmarks panel ---
@@ -215,26 +247,32 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBookmarksPanel();
     bookmarksPanel.classList.toggle('hidden');
   });
-
   closeBookmarksBtn.addEventListener('click', () => bookmarksPanel.classList.add('hidden'));
-
   function updateBookmarksPanel() {
-    const bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
     bookmarksList.innerHTML = '';
-    if (bookmarks.length === 0) {
-      bookmarksList.innerHTML = '<li>No bookmarks yet.</li>';
-      return;
-    }
+    if (bookmarks.length === 0) { bookmarksList.innerHTML = '<li>No bookmarks yet.</li>'; return; }
     bookmarks.forEach(crn => {
       const course = allCourses.find(c => c.crn === crn) || { crn, courseName: "Unknown Course", subjectCode: "" };
       const li = document.createElement('li');
       li.className = "border-b border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1";
       li.textContent = `${course.subjectCode} ${course.courseName} (CRN: ${course.crn})`;
-      li.addEventListener('click', () => {
-        bookmarksPanel.classList.add('hidden');
-        fetchCourseDetails(termSelect.value, course.crn);
-      });
+      li.addEventListener('click', () => { bookmarksPanel.classList.add('hidden'); fetchCourseDetails(termSelect.value, course.crn); });
       bookmarksList.appendChild(li);
+    });
+  }
+
+  // --- Watched panel ---
+  closeWatchedBtn.addEventListener('click', () => watchedPanel.classList.add('hidden'));
+  function updateWatchedPanel() {
+    watchedList.innerHTML = '';
+    if (watchedCourses.length === 0) { watchedList.innerHTML = '<li>No watched courses.</li>'; return; }
+    watchedCourses.forEach(crn => {
+      const course = allCourses.find(c => c.crn === crn) || { crn, courseName: "Unknown Course", subjectCode: "" };
+      const li = document.createElement('li');
+      li.className = "border-b border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1";
+      li.textContent = `${course.subjectCode} ${course.courseName} (CRN: ${course.crn})`;
+      li.addEventListener('click', () => { watchedPanel.classList.add('hidden'); fetchCourseDetails(termSelect.value, course.crn); });
+      watchedList.appendChild(li);
     });
   }
 
@@ -252,7 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function displayCourseDetails(details) {
     modalTitle.textContent = details.title;
-
     const seats = details.seats?.capacity
       ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
           <p class="font-semibold">Seats</p>
@@ -269,20 +306,12 @@ document.addEventListener('DOMContentLoaded', () => {
           <p>Remaining: ${details.waitlist.remaining}</p>
         </div>` : `<div><p class="font-semibold">Waitlist</p><p>Not available</p></div>`;
 
-    const prereqs = details.prerequisites?.length
-      ? `<p><strong>Prerequisites:</strong> ${details.prerequisites.join(', ')}</p>` : '';
-
-    const instructorInfo = details.instructorInfo
-      ? `<p><strong>Instructor Info:</strong> <a href="${details.instructorInfo.url}" target="_blank">${details.instructorInfo.name}</a></p>` : '';
-
     modalBody.innerHTML = `
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div>
           <p><span class="font-semibold">Term:</span> ${details.associatedTerm}</p>
           <p><span class="font-semibold">Levels:</span> ${details.levels}</p>
           <p><span class="font-semibold">Credits:</span> ${details.credits}</p>
-          ${prereqs}
-          ${instructorInfo}
         </div>
         <div class="flex gap-4">${seats}${waitlist}</div>
       </div>
@@ -296,13 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.remove('hidden');
   }
 
-  // --- Modal close handlers ---
   const closeModal = () => modal.classList.add('hidden');
   modal.addEventListener('click', e => { if(e.target === modal) closeModal(); });
   modal.querySelector('.close-button').addEventListener('click', closeModal);
   window.addEventListener('keydown', e => { if(e.key === "Escape") closeModal(); });
 
-  // --- Optional search/filter/sort ---
+  // --- Search/filter/sort ---
   if(searchInput) searchInput.addEventListener('input', applySearchAndFilters);
   [typeFilter, levelFilter, availabilityFilter].forEach(f => f?.addEventListener('change', applySearchAndFilters));
   if(sortSelect) sortSelect.addEventListener('change', applySearchAndFilters);

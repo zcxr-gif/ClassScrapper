@@ -4,6 +4,9 @@ import axios from "axios";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
 import { load } from "cheerio";
+import crypto from "crypto";
+import cron from "node-cron";
+
 // Import the database helper functions
 import { setupDatabase, getFromCache, saveToCache } from "./database.mjs";
 
@@ -18,14 +21,31 @@ let db;
 setupDatabase().then(database => {
   db = database;
   console.log("✅ Database cache is ready.");
+  
+  // Ensure watched_courses table exists
+  db.run(`
+    CREATE TABLE IF NOT EXISTS watched_courses (
+      term TEXT NOT NULL,
+      crn TEXT NOT NULL,
+      last_seats_remaining INTEGER,
+      last_waitlist_remaining INTEGER,
+      last_schedule_hash TEXT,
+      PRIMARY KEY (term, crn)
+    )
+  `);
+  
 }).catch(err => {
   console.error("❌ Failed to set up database:", err);
-  process.exit(1); // Exit if the database can't be initialized
+  process.exit(1);
 });
 
+// --- Utility Function ---
+function hashSchedule(schedule) {
+  const str = JSON.stringify(schedule);
+  return crypto.createHash('md5').update(str).digest('hex');
+}
 
 // --- Helper Functions (Original Scraping Logic) ---
-
 async function fetchTerms() {
   const jar = new CookieJar();
   const client = wrapper(axios.create({ jar }));
@@ -116,17 +136,13 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
       const titleLink = $(element).find('a');
       const fullTitle = titleLink.text().trim();
       const titleParts = fullTitle.split(" - ");
-      
       if (titleParts.length < 4) return;
-      
+
       const courseName = titleParts[0].trim();
       const crn = titleParts[1].trim();
       const subjectCode = titleParts[2].trim();
       const section = titleParts[3].trim();
-      
-      if (!crn || !/^\d{5}$/.test(crn)) {
-        return;
-      }
+      if (!crn || !/^\d{5}$/.test(crn)) return;
 
       const schedule = [];
       let primaryInstructor = "N/A";
@@ -138,7 +154,6 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
       if (meetingRows.length > 1) {
         meetingRows.slice(1).each((_, row) => {
           const cells = $(row).find('td');
-          
           if (cells.length >= 7) { 
             const instructorName = cells.eq(6).text().split('(')[0].trim().replace(/\s+/g, ' ');
 
@@ -154,10 +169,7 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
           }
         });
       }
-      
-      if (schedule.length > 0 && schedule[0].instructor) {
-        primaryInstructor = schedule[0].instructor;
-      }
+      if (schedule.length > 0 && schedule[0].instructor) primaryInstructor = schedule[0].instructor;
 
       courses.push({
         crn,
@@ -178,13 +190,10 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
 
 async function getAllCoursesForSubject(term, subject, client) {
   const initialResult = await fetchCourses(term, subject, '', client);
-  
   if (initialResult.limitHit) {
     console.log(`Limit hit for subject ${subject}. Subdividing search...`);
-    const courseLevels = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    const subPromises = courseLevels.map(level => 
-        fetchCourses(term, subject, `${level}%`, client)
-    );
+    const courseLevels = ['1','2','3','4','5','6','7','8','9'];
+    const subPromises = courseLevels.map(level => fetchCourses(term, subject, `${level}%`, client));
     const subdividedResults = await Promise.all(subPromises);
     return subdividedResults.flatMap(result => result.courses); 
   } else {
@@ -203,10 +212,7 @@ async function fetchCourseDetails(termCode, crn) {
 
   const titleElement = $("th.ddlabel").first();
   details.title = titleElement.contents().first().text().trim();
-
-  if (!details.title) {
-    return null;
-  }
+  if (!details.title) return null;
 
   const detailsBlock = titleElement.closest('tr').next().find('td.dddefault').text();
   
@@ -243,147 +249,178 @@ async function fetchCourseDetails(termCode, crn) {
   return details;
 }
 
-
-// --- API Endpoints (NOW WITH CACHING) ---
+// --- API Endpoints ---
 
 app.get("/terms", async (req, res) => {
   const cacheKey = "all_terms_with_subjects";
   try {
     const cachedData = await getFromCache(db, cacheKey);
-    if (cachedData) {
-      console.log("✔️ Serving terms from cache.");
-      return res.json(cachedData);
-    }
-    
-    console.log("Fetching live terms and their subjects...");
+    if (cachedData) return res.json(cachedData);
+
     const terms = await fetchTerms();
-    if (terms.length === 0) {
-      return res.status(404).json({ error: "No terms are currently available." });
-    }
-    
+    if (terms.length === 0) return res.status(404).json({ error: "No terms available." });
+
     const allTermData = await Promise.all(
       terms.map(async (term) => {
         const subjects = await fetchSubjects(term.code);
-        return {
-          termName: term.name,
-          termCode: term.code,
-          subjectCount: subjects.length,
-          subjects: subjects,
-        };
+        return { termName: term.name, termCode: term.code, subjectCount: subjects.length, subjects };
       })
     );
-    
+
     await saveToCache(db, cacheKey, allTermData);
-    console.log("✔️ Fetched and cached new term data.");
-    
     res.json(allTermData);
   } catch (err) {
-    console.error("Error in /terms endpoint:", err.message);
-    res.status(500).json({ error: "Failed to fetch term and subject list." });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch terms." });
   }
 });
 
 app.get("/courses/:term/:subject", async (req, res) => {
   try {
     const { term, subject } = req.params;
-
     if (!term || !/^\d{6}$/.test(term) || !subject || !/^[A-Z]{3,4}$/.test(subject.toUpperCase())) {
-      return res.status(400).json({ error: "A valid 6-digit term and 3-4 letter subject code are required." });
+      return res.status(400).json({ error: "Invalid term or subject code." });
     }
 
     const subjectCode = subject.toUpperCase();
     const cacheKey = `courses_${term}_${subjectCode}`;
-    
     const cachedData = await getFromCache(db, cacheKey);
-    if (cachedData) {
-        console.log(`✔️ Serving cached courses for ${subjectCode} in term ${term}.`);
-        return res.json({ count: cachedData.length, courses: cachedData, source: "cache" });
-    }
+    if (cachedData) return res.json({ count: cachedData.length, courses: cachedData, source: "cache" });
 
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar }));
     await client.get("https://oasis.farmingdale.edu/pls/prod/bwckschd.p_disp_dyn_sched");
-    console.log(`Fetching live courses for subject ${subjectCode} in term ${term}...`);
     const courses = await getAllCoursesForSubject(term, subjectCode, client);
-    
-    if (courses.length === 0) {
-        return res.status(404).json({ error: `No courses found for subject ${subjectCode} in this term.` });
-    }
-
     await saveToCache(db, cacheKey, courses);
-    console.log(`✔️ Found and cached ${courses.length} courses for ${subjectCode}.`);
-    res.json({ count: courses.length, courses: courses, source: "live" });
-
+    res.json({ count: courses.length, courses, source: "live" });
   } catch (err) {
-    console.error("Error fetching course list for subject:", err.message);
-    res.status(500).json({ error: "Failed to fetch course list for subject." });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch courses." });
   }
 });
 
-// This endpoint is not typically used by the UI but is kept for completeness
 app.get("/courses/:term", async (req, res) => {
   try {
     const term = req.params.term;
-    if (!term || !/^\d{6}$/.test(term)) {
-      return res.status(400).json({ error: "A valid 6-digit term code is required." });
-    }
+    if (!term || !/^\d{6}$/.test(term)) return res.status(400).json({ error: "Invalid term code." });
 
     const cacheKey = `allcourses_${term}`;
-    
     const cachedData = await getFromCache(db, cacheKey);
-    if (cachedData) {
-        console.log(`✔️ Serving all cached courses for term ${term}.`);
-        return res.json({ count: cachedData.length, courses: cachedData, source: "cache" });
-    }
+    if (cachedData) return res.json({ count: cachedData.length, courses: cachedData, source: "cache" });
 
     const subjects = await fetchSubjects(term);
-    if (subjects.length === 0) {
-      return res.status(404).json({ error: "No subjects found for this term." });
-    }
+    if (subjects.length === 0) return res.status(404).json({ error: "No subjects found for this term." });
 
     const jar = new CookieJar();
     const client = wrapper(axios.create({ jar }));
     await client.get("https://oasis.farmingdale.edu/pls/prod/bwckschd.p_disp_dyn_sched");
-    
-    console.log(`Fetching live courses in PARALLEL for ${subjects.length} subjects in term ${term}.`);
 
-    const coursePromises = subjects.map(subject => 
-        getAllCoursesForSubject(term, subject, client)
-    );
-
+    const coursePromises = subjects.map(subject => getAllCoursesForSubject(term, subject, client));
     const nestedCourses = await Promise.all(coursePromises);
     const allCourses = nestedCourses.flat();
-    
-    await saveToCache(db, cacheKey, allCourses);
-    console.log(`✔️ All subjects fetched successfully! Found and cached ${allCourses.length} total courses.`);
-    res.json({ count: allCourses.length, courses: allCourses, source: "live" });
 
+    await saveToCache(db, cacheKey, allCourses);
+    res.json({ count: allCourses.length, courses: allCourses, source: "live" });
   } catch (err) {
-    console.error("Error fetching all course list:", err.message);
-    res.status(500).json({ error: "Failed to fetch all course list." });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch all courses." });
   }
 });
 
 app.get("/course-details/:term/:crn", async (req, res) => {
-  // NOTE: Individual course details are not cached to ensure seat counts are fresh.
   try {
     const { term, crn } = req.params;
     if (!term || !/^\d{6}$/.test(term) || !crn || !/^\d{5}$/.test(crn)) {
-      return res.status(400).json({ error: "A valid 6-digit term and 5-digit CRN are required." });
+      return res.status(400).json({ error: "Invalid term or CRN." });
     }
     const details = await fetchCourseDetails(term, crn);
-
-    if (!details) {
-      return res.status(404).json({ error: "Course not found or details are unavailable for the specified term and CRN." });
-    }
-    
+    if (!details) return res.status(404).json({ error: "Course details unavailable." });
     res.json(details);
   } catch (err) {
-    console.error("Error fetching course details:", err.message);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch course details." });
   }
 });
 
+// --- Watchlist Endpoints ---
+app.post("/watch/:term/:crn", async (req, res) => {
+  try {
+    const { term, crn } = req.params;
+    const details = await fetchCourseDetails(term, crn);
+    if (!details) return res.status(404).json({ error: "Course not found" });
+
+    const lastScheduleHash = hashSchedule(details.schedule);
+    await db.run(
+      `INSERT OR REPLACE INTO watched_courses
+       (term, crn, last_seats_remaining, last_waitlist_remaining, last_schedule_hash)
+       VALUES (?, ?, ?, ?, ?)`,
+       term, crn, parseInt(details.seats.remaining), parseInt(details.waitlist.remaining), lastScheduleHash
+    );
+
+    res.json({ message: `Course ${crn} in term ${term} added to watchlist` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to add course to watchlist" });
+  }
+});
+
+app.delete("/watch/:term/:crn", async (req, res) => {
+  try {
+    const { term, crn } = req.params;
+    await db.run(`DELETE FROM watched_courses WHERE term = ? AND crn = ?`, term, crn);
+    res.json({ message: `Course ${crn} in term ${term} removed from watchlist` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to remove course from watchlist" });
+  }
+});
+
+// --- Cron Job: Poll watched courses every 5 minutes ---
+async function pollWatchedCourses() {
+  try {
+    const rows = await db.all("SELECT * FROM watched_courses");
+    
+    for (const row of rows) {
+      try {
+        const details = await fetchCourseDetails(row.term, row.crn);
+        if (!details) continue;
+
+        const newSeatsRemaining = parseInt(details.seats.remaining);
+        const newWaitlistRemaining = parseInt(details.waitlist.remaining);
+        const newScheduleHash = hashSchedule(details.schedule);
+
+        let updated = false;
+
+        if (row.last_seats_remaining !== newSeatsRemaining ||
+            row.last_waitlist_remaining !== newWaitlistRemaining ||
+            row.last_schedule_hash !== newScheduleHash) {
+          updated = true;
+          console.log(`🔄 Update detected for CRN ${row.crn} (Term ${row.term})`);
+
+          await db.run(
+            `UPDATE watched_courses 
+             SET last_seats_remaining = ?, last_waitlist_remaining = ?, last_schedule_hash = ?
+             WHERE term = ? AND crn = ?`,
+             newSeatsRemaining, newWaitlistRemaining, newScheduleHash, row.term, row.crn
+          );
+        }
+
+        if (!updated) console.log(`✅ No change for CRN ${row.crn}`);
+      } catch (err) {
+        console.error(`Error fetching course ${row.crn}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error("Error polling watched courses:", err.message);
+  }
+}
+
+cron.schedule('*/5 * * * *', () => {
+  console.log('🕒 Polling watched courses...');
+  pollWatchedCourses();
+});
+
+// --- Start Server ---
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });
