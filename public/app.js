@@ -7,10 +7,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalTitle = document.getElementById('modal-title');
   const modalBody = document.getElementById('modal-body');
   const closeButton = document.querySelector('.close-button');
+  const darkToggle = document.getElementById('dark-toggle');
+  const root = document.documentElement;
 
   let termsData = [];
 
-  // Fetch terms
+  // --- Dark mode persistence ---
+  if (localStorage.getItem('theme') === 'dark') {
+    root.classList.add('dark');
+  }
+
+  darkToggle.addEventListener('click', () => {
+    root.classList.toggle('dark');
+    if (root.classList.contains('dark')) {
+      localStorage.setItem('theme', 'dark');
+    } else {
+      localStorage.setItem('theme', 'light');
+    }
+  });
+
+  // --- Fetch terms ---
   fetch('/terms')
     .then(res => res.json())
     .then(data => {
@@ -44,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // --- Populate dropdowns ---
   function populateTerms(terms) {
     termSelect.innerHTML = '<option value="">Select a Term</option>';
     terms.forEach(term => {
@@ -59,11 +76,12 @@ document.addEventListener('DOMContentLoaded', () => {
     subjects.forEach(subj => {
       const option = document.createElement('option');
       option.value = subj;
-      option.textContent = subj; // Could map to full names later
+      option.textContent = subj; // could later map to full subject names
       subjectSelect.appendChild(option);
     });
   }
 
+  // --- Fetch & display courses ---
   function fetchCourses(term, subject) {
     loadingMessage.classList.remove('hidden');
     coursesContainer.innerHTML = '';
@@ -89,18 +107,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     courses.forEach(course => {
       const scheduleInfo = course.schedule.map(s => {
-        const location = s.where.toUpperCase().includes("ONLINE") ? "Online" : `In-person @ ${s.where}`;
-        return `<p class="text-sm text-gray-600">${s.days} ${s.time} • ${location}</p>`;
+        const location = s.where.toUpperCase().includes("ONLINE")
+          ? "Online"
+          : `In-person @ ${s.where}`;
+        return `<p class="text-sm text-gray-600 dark:text-gray-400">${s.days} ${s.time} • ${location}</p>`;
       }).join("");
 
       const card = document.createElement('div');
-      card.className = "bg-white rounded-xl shadow hover:shadow-lg transition p-5 flex flex-col justify-between";
+      card.className = "bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition p-5 flex flex-col justify-between";
 
       card.innerHTML = `
         <div>
-          <h3 class="text-lg font-semibold text-blue-700">${course.courseName} (${course.section})</h3>
-          <p class="text-sm text-gray-500">CRN: ${course.crn}</p>
-          <p class="mt-1 font-medium text-gray-800">Instructor: ${course.instructor}</p>
+          <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-400">${course.courseName} (${course.section})</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400">CRN: ${course.crn}</p>
+          <p class="mt-1 font-medium">Instructor: ${course.instructor}</p>
           <div class="mt-2 space-y-1">${scheduleInfo}</div>
         </div>
         <div class="mt-4">
@@ -123,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // --- Fetch & display details ---
   function fetchCourseDetails(term, crn) {
     fetch(`/course-details/${term}/${crn}`)
       .then(res => res.json())
@@ -155,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.remove('hidden');
   }
 
+  // --- Modal close handlers ---
   closeButton.addEventListener('click', () => modal.classList.add('hidden'));
   window.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
 });
