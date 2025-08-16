@@ -1,61 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Farmingdale State College - Class Scraper</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farmingdale Class Finder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <header>
-        <h1>Farmingdale State College - Class Scraper</h1>
-    </header>
+<body class="bg-gray-100 min-h-screen flex flex-col">
 
-    <main>
-        <div class="controls">
-            <div class="select-container">
-                <label for="term-select">Select a Term:</label>
-                <select id="term-select" disabled>
-                    <option>Loading terms...</option>
-                </select>
-            </div>
-            <div class="select-container">
-                <label for="subject-select">Select a Subject:</label>
-                <select id="subject-select" disabled>
-                    <option>Select a term first</option>
-                </select>
-            </div>
-        </div>
+  <!-- Header -->
+  <header class="bg-blue-700 text-white shadow-lg">
+    <div class="container mx-auto py-6 px-4 text-center">
+      <h1 class="text-3xl font-bold">Farmingdale State College</h1>
+      <p class="text-lg opacity-90">Class Finder</p>
+    </div>
+  </header>
 
-        <div id="courses-container">
-            <table id="courses-table">
-                <thead>
-                    <tr>
-                        <th>CRN</th>
-                        <th>Course Name</th>
-                        <th>Section</th>
-                        <th>Instructor</th>
-                        <th>Schedule</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody id="courses-tbody">
-                </tbody>
-            </table>
-            <div id="loading-message" class="hidden">
-                <p>Loading courses...</p>
-            </div>
-        </div>
-    </main>
-
-    <div id="details-modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2 id="modal-title">Course Details</h2>
-            <div id="modal-body"></div>
-        </div>
+  <!-- Controls -->
+  <main class="container mx-auto px-4 py-6 flex-1">
+    <div class="flex flex-col md:flex-row gap-4 mb-6">
+      <div class="flex-1">
+        <label for="term-select" class="block text-gray-700 font-semibold mb-1">Select a Term</label>
+        <select id="term-select" disabled class="w-full rounded-lg border-gray-300 shadow-sm p-2">
+          <option>Loading terms...</option>
+        </select>
+      </div>
+      <div class="flex-1">
+        <label for="subject-select" class="block text-gray-700 font-semibold mb-1">Select a Subject</label>
+        <select id="subject-select" disabled class="w-full rounded-lg border-gray-300 shadow-sm p-2">
+          <option>Select a term first</option>
+        </select>
+      </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Loading Spinner -->
+    <div id="loading-message" class="hidden flex justify-center py-6">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+
+    <!-- Courses Container -->
+    <div id="courses-container" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Course cards will be injected here -->
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-lg w-11/12 max-w-2xl p-6 relative animate-fadeIn">
+      <button class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-2xl close-button">&times;</button>
+      <h2 id="modal-title" class="text-2xl font-bold mb-4">Course Details</h2>
+      <div id="modal-body" class="space-y-3 text-gray-700"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
