@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => { 
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
   const coursesContainer = document.getElementById('courses-container');
@@ -32,12 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
   optionsPanel.id = 'options-panel';
   optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-72 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
   optionsPanel.innerHTML = `
-    <h3 class="text-xl font-bold mb-4">📚 Your Courses</h3>
+    <h3 class="text-xl font-bold mb-2">📚 Your Courses</h3>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      View your bookmarked and watched courses here. You can remove courses or view details directly.
+    </p>
     <div class="flex gap-2 mb-4">
       <button id="show-bookmarks-tab" class="flex-1 px-3 py-1 rounded-lg bg-yellow-400 dark:bg-yellow-600 hover:brightness-105 transition">Bookmarks</button>
       <button id="show-watched-tab" class="flex-1 px-3 py-1 rounded-lg bg-blue-400 dark:bg-blue-600 hover:brightness-105 transition">Watched</button>
     </div>
-    <ul id="options-list" class="space-y-1 max-h-[70vh] overflow-auto"></ul>
+    <ul id="options-list" class="space-y-2 max-h-[70vh] overflow-auto"></ul>
     <button id="close-options" class="mt-4 w-full px-3 py-1 rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 transition">Close</button>
   `;
   document.body.appendChild(optionsPanel);
@@ -49,6 +52,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   optionsToggle.addEventListener('click', () => optionsPanel.classList.toggle('-translate-x-full'));
   closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
+
+  // --- Close options panel when clicking outside ---
+  document.addEventListener('click', (e) => {
+    const isClickInside = optionsPanel.contains(e.target) || optionsToggle.contains(e.target);
+    if (!isClickInside) {
+      optionsPanel.classList.add('-translate-x-full');
+    }
+  });
 
   // --- Data ---
   let termsData = [];
@@ -243,17 +254,55 @@ document.addEventListener('DOMContentLoaded', () => {
   modal.querySelector('.close-button').addEventListener('click', closeModal);
   window.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
 
-  // --- Bookmarks / Watched tabs ---
+  // --- Bookmarks / Watched tabs (Mini Cards) ---
   function populateOptionsList(list, type){
     optionsList.innerHTML = '';
-    if(list.length === 0){ optionsList.innerHTML = `<p>No ${type} courses</p>`; return; }
+    if(list.length === 0){
+      optionsList.innerHTML = `<p class="text-gray-500 dark:text-gray-400">No ${type} courses</p>`;
+      return;
+    }
+
     list.forEach(crn => {
+      const course = allCourses.find(c => c.crn === crn);
+      if(!course) return;
+
+      const courseNumberMatch = course.courseName.match(/\d{3}/);
+      const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+      const seatsText = course.seats
+        ? `${course.seats.remaining} / ${course.seats.capacity} seats`
+        : 'Seats info N/A';
+
       const li = document.createElement('li');
-      li.innerHTML = `<button class="w-full text-left px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700" data-crn="${crn}">${crn}</button>`;
-      li.querySelector('button').addEventListener('click', () => {
-        optionsPanel.classList.add('-translate-x-full');
+      li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex flex-col gap-1';
+      li.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="font-semibold text-sm">${course.subjectCode} ${courseNumber} – ${course.courseName}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">Instructor: ${course.instructor}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">${seatsText}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Click ✖ to remove from ${type}</p>
+          </div>
+          <button class="remove-btn text-red-500 text-sm font-bold ml-2">✖</button>
+        </div>
+        <button class="details-mini-btn mt-1 text-blue-600 dark:text-blue-400 text-xs font-medium underline">View Details</button>
+      `;
+
+      li.querySelector('.details-mini-btn').addEventListener('click', () => {
         fetchCourseDetails(termSelect.value, crn);
+        optionsPanel.classList.add('-translate-x-full');
       });
+
+      li.querySelector('.remove-btn').addEventListener('click', () => {
+        if(type === 'bookmark'){
+          bookmarks = bookmarks.filter(c => c !== crn);
+          localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+        } else {
+          watchedCourses = watchedCourses.filter(c => c !== crn);
+          localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+        }
+        li.remove();
+      });
+
       optionsList.appendChild(li);
     });
   }
@@ -295,14 +344,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if(availabilityFilter.value) filtered = filtered.filter(c => {
       if(!c.seats) return false;
-      return availabilityFilter.value === 'open' ? c.seats.remaining > 0 : c.seats.remaining === 0;
+      const percent = (c.seats.actual / c.seats.capacity) * 100;
+      return availabilityFilter.value === 'open' ? percent < 100 : percent >= 100;
     });
 
-    const sortBy = sortSelect.value;
-    if(sortBy){
-      if(sortBy === 'courseNumber') filtered.sort((a,b) => a.courseName.localeCompare(b.courseName));
-      if(sortBy === 'instructor') filtered.sort((a,b) => a.instructor.localeCompare(b.instructor));
-      if(sortBy === 'seatsRemaining') filtered.sort((a,b) => (b.seats?.remaining || 0) - (a.seats?.remaining || 0));
+    if(sortSelect.value) {
+      if(sortSelect.value === 'name') filtered.sort((a,b) => a.courseName.localeCompare(b.courseName));
+      else if(sortSelect.value === 'crn') filtered.sort((a,b) => a.crn - b.crn);
     }
 
     displayCourses(filtered);
