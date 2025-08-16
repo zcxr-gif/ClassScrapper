@@ -10,6 +10,9 @@ import { setupDatabase, getFromCache, saveToCache } from "./database.mjs";
 const app = express();
 const PORT = 3000;
 
+// --- Serve static files from the 'public' directory ---
+app.use(express.static('public'));
+
 // --- Database Setup ---
 let db;
 setupDatabase().then(database => {
