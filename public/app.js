@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => { 
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
   const coursesContainer = document.getElementById('courses-container');
@@ -9,40 +9,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const darkToggle = document.getElementById('dark-toggle');
   const root = document.documentElement;
 
-  // Bookmarks elements
-  const showBookmarksBtn = document.getElementById('show-bookmarks');
-  const bookmarksList = document.getElementById('bookmarks-list');
+  // Options Panel
+  const optionsToggle = document.createElement('button');
+  optionsToggle.id = 'options-toggle';
+  optionsToggle.className = 'fixed top-4 left-4 z-50 bg-blue-600 text-white px-3 py-2 rounded-lg shadow-md';
+  optionsToggle.textContent = 'Options';
+  document.body.appendChild(optionsToggle);
 
-  // Floating bookmarks panel (bottom right)
-  let bookmarksPanel = document.getElementById('bookmarks-panel');
-  if (!bookmarksPanel) {
-    bookmarksPanel = document.createElement('div');
-    bookmarksPanel.id = 'bookmarks-panel';
-    bookmarksPanel.className = 'fixed bottom-4 right-4 z-50 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-lg shadow-md w-72 max-h-[60vh] overflow-auto hidden';
-    bookmarksPanel.innerHTML = `
-      <h3 class="font-bold mb-2">Bookmarked Courses</h3>
-      <ul id="bookmarks-list" class="space-y-1"></ul>
-      <button id="close-bookmarks" class="mt-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded-lg w-full">Close</button>
-    `;
-    document.body.appendChild(bookmarksPanel);
-  }
-  const closeBookmarksBtn = bookmarksPanel.querySelector('#close-bookmarks');
+  const optionsPanel = document.createElement('div');
+  optionsPanel.id = 'options-panel';
+  optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-72 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
+  optionsPanel.innerHTML = `
+    <h3 class="text-xl font-bold mb-4">Your Courses</h3>
+    <div class="flex gap-2 mb-4">
+      <button id="show-bookmarks-tab" class="flex-1 px-3 py-1 rounded-lg bg-yellow-400 dark:bg-yellow-600">Bookmarks</button>
+      <button id="show-watched-tab" class="flex-1 px-3 py-1 rounded-lg bg-blue-400 dark:bg-blue-600">Watched</button>
+    </div>
+    <ul id="options-list" class="space-y-1 max-h-[70vh] overflow-auto"></ul>
+    <button id="close-options" class="mt-4 w-full px-3 py-1 rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600">Close</button>
+  `;
+  document.body.appendChild(optionsPanel);
 
-  // Floating watched courses panel
-  let watchedPanel = document.getElementById('watched-panel');
-  if (!watchedPanel) {
-    watchedPanel = document.createElement('div');
-    watchedPanel.id = 'watched-panel';
-    watchedPanel.className = 'fixed bottom-4 left-4 z-50 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-lg shadow-md w-72 max-h-[60vh] overflow-auto hidden';
-    watchedPanel.innerHTML = `
-      <h3 class="font-bold mb-2">Watched Courses</h3>
-      <ul id="watched-list" class="space-y-1"></ul>
-      <button id="close-watched" class="mt-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded-lg w-full">Close</button>
-    `;
-    document.body.appendChild(watchedPanel);
-  }
-  const watchedList = watchedPanel.querySelector('#watched-list');
-  const closeWatchedBtn = watchedPanel.querySelector('#close-watched');
+  const optionsList = optionsPanel.querySelector('#options-list');
+  const closeOptionsBtn = optionsPanel.querySelector('#close-options');
+  const showBookmarksTab = optionsPanel.querySelector('#show-bookmarks-tab');
+  const showWatchedTab = optionsPanel.querySelector('#show-watched-tab');
 
   // Optional search/filter/sort elements
   const searchInput = document.getElementById('course-search');
@@ -54,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let termsData = [];
   let allCourses = [];
   let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-  let watchedCourses = []; // Stores watched CRNs
+  let watchedCourses = JSON.parse(localStorage.getItem('watchedCourses') || '[]'); // persisted
 
   const subjectMap = {
     ANT: 'Anthropology', ARC: 'Architectural Technology', ART: 'Art History',
@@ -179,21 +170,21 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="h-2 rounded ${seatsColor}" style="width:${seatsPercent}%;"></div>
           </div>` : ''}
         </div>
-        <div class="mt-4 flex flex-col gap-2">
+        <div class="mt-4 flex flex-wrap gap-2">
           <button 
-            class="details-btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
+            class="details-btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1"
             data-term="${termSelect.value}" data-crn="${course.crn}">
             View Details
           </button>
           <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank"
-             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg w-full text-center">
-             Sign Up in OASIS
+             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex-1 text-center">
+             Sign Up
           </a>
-          <button class="bookmark-btn ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-300'} hover:bg-yellow-400 text-white px-4 py-2 rounded-lg w-full"
+          <button class="bookmark-btn ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-300'} hover:bg-yellow-400 text-white px-4 py-2 rounded-lg flex-1"
                   data-crn="${course.crn}">
             ${bookmarks.includes(course.crn) ? '★ Bookmarked' : '☆ Bookmark'}
           </button>
-          <button class="watch-btn ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'} text-white px-4 py-2 rounded-lg w-full"
+          <button class="watch-btn ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'} text-white px-4 py-2 rounded-lg flex-1"
                   data-crn="${course.crn}" data-term="${termSelect.value}">
             ${watchedCourses.includes(course.crn) ? 'Watching' : 'Watch'}
           </button>
@@ -205,9 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Event delegation ---
   coursesContainer.addEventListener('click', event => {
-    if (event.target.classList.contains('details-btn')) {
-      fetchCourseDetails(termSelect.value, event.target.dataset.crn);
-    }
+    if (event.target.classList.contains('details-btn')) fetchCourseDetails(termSelect.value, event.target.dataset.crn);
     if (event.target.classList.contains('bookmark-btn')) toggleBookmark(event.target);
     if (event.target.classList.contains('watch-btn')) toggleWatch(event.target);
   });
@@ -221,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
     button.classList.toggle('bg-yellow-500', bookmarks.includes(crn));
     button.classList.toggle('bg-gray-300', !bookmarks.includes(crn));
     button.textContent = bookmarks.includes(crn) ? '★ Bookmarked' : '☆ Bookmark';
-    updateBookmarksPanel();
   }
 
   function toggleWatch(button) {
@@ -232,48 +220,15 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch(`/watch/${term}/${crn}`, { method: isWatching ? 'DELETE' : 'POST' })
       .then(res => res.json())
       .then(() => {
-        if (isWatching) watchedCourses = watchedCourses.filter(c => c !== crn);
+        if(isWatching) watchedCourses = watchedCourses.filter(c => c !== crn);
         else watchedCourses.push(crn);
+        localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+
         button.textContent = isWatching ? 'Watch' : 'Watching';
         button.classList.toggle('bg-blue-500', !isWatching);
         button.classList.toggle('bg-gray-300', isWatching);
-        updateWatchedPanel();
       })
       .catch(err => console.error('Error toggling watch:', err));
-  }
-
-  // --- Bookmarks panel ---
-  showBookmarksBtn.addEventListener('click', () => {
-    updateBookmarksPanel();
-    bookmarksPanel.classList.toggle('hidden');
-  });
-  closeBookmarksBtn.addEventListener('click', () => bookmarksPanel.classList.add('hidden'));
-  function updateBookmarksPanel() {
-    bookmarksList.innerHTML = '';
-    if (bookmarks.length === 0) { bookmarksList.innerHTML = '<li>No bookmarks yet.</li>'; return; }
-    bookmarks.forEach(crn => {
-      const course = allCourses.find(c => c.crn === crn) || { crn, courseName: "Unknown Course", subjectCode: "" };
-      const li = document.createElement('li');
-      li.className = "border-b border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1";
-      li.textContent = `${course.subjectCode} ${course.courseName} (CRN: ${course.crn})`;
-      li.addEventListener('click', () => { bookmarksPanel.classList.add('hidden'); fetchCourseDetails(termSelect.value, course.crn); });
-      bookmarksList.appendChild(li);
-    });
-  }
-
-  // --- Watched panel ---
-  closeWatchedBtn.addEventListener('click', () => watchedPanel.classList.add('hidden'));
-  function updateWatchedPanel() {
-    watchedList.innerHTML = '';
-    if (watchedCourses.length === 0) { watchedList.innerHTML = '<li>No watched courses.</li>'; return; }
-    watchedCourses.forEach(crn => {
-      const course = allCourses.find(c => c.crn === crn) || { crn, courseName: "Unknown Course", subjectCode: "" };
-      const li = document.createElement('li');
-      li.className = "border-b border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded px-1";
-      li.textContent = `${course.subjectCode} ${course.courseName} (CRN: ${course.crn})`;
-      li.addEventListener('click', () => { watchedPanel.classList.add('hidden'); fetchCourseDetails(termSelect.value, course.crn); });
-      watchedList.appendChild(li);
-    });
   }
 
   // --- Modal & course details ---
@@ -351,7 +306,10 @@ document.addEventListener('DOMContentLoaded', () => {
         : c.schedule.some(s => !s.where.toUpperCase().includes("ONLINE"))
     );
 
-    if(levelFilter?.value) filtered = filtered.filter(c => c.courseName.match(/\d{3}/)[0].startsWith(levelFilter.value));
+    if(levelFilter?.value) filtered = filtered.filter(c => {
+      const match = c.courseName.match(/\d{3}/);
+      return match && match[0].startsWith(levelFilter.value);
+    });
 
     if(availabilityFilter?.value) filtered = filtered.filter(c => {
       if(!c.seats) return false;
@@ -367,4 +325,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     displayCourses(filtered);
   }
+
+  // --- Options Panel Events ---
+  optionsToggle.addEventListener('click', () => {
+    optionsPanel.classList.toggle('-translate-x-full');
+  });
+  closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
+
+  showBookmarksTab.addEventListener('click', () => {
+    optionsList.innerHTML = '';
+    if(bookmarks.length === 0){ optionsList.innerHTML = '<p>No bookmarks</p>'; return; }
+    bookmarks.forEach(crn => {
+      const li = document.createElement('li');
+      li.innerHTML = `<button class="w-full text-left px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700" data-crn="${crn}">${crn}</button>`;
+      li.querySelector('button').addEventListener('click', () => {
+        optionsPanel.classList.add('-translate-x-full');
+        const course = allCourses.find(c => c.crn === crn);
+        if(course) fetchCourseDetails(termSelect.value, crn);
+      });
+      optionsList.appendChild(li);
+    });
+  });
+
+  showWatchedTab.addEventListener('click', () => {
+    optionsList.innerHTML = '';
+    if(watchedCourses.length === 0){ optionsList.innerHTML = '<p>No watched courses</p>'; return; }
+    watchedCourses.forEach(crn => {
+      const li = document.createElement('li');
+      li.innerHTML = `<button class="w-full text-left px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700" data-crn="${crn}">${crn}</button>`;
+      li.querySelector('button').addEventListener('click', () => {
+        optionsPanel.classList.add('-translate-x-full');
+        const course = allCourses.find(c => c.crn === crn);
+        if(course) fetchCourseDetails(termSelect.value, crn);
+      });
+      optionsList.appendChild(li);
+    });
+  });
+
 });

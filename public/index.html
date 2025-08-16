@@ -27,22 +27,15 @@
     </div>
   </header>
 
-  <!-- Floating Bookmarks Button -->
-  <button id="show-bookmarks" class="fixed top-4 left-4 z-50 bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-2 rounded-lg shadow-md">
-    ★ Bookmarks
+  <!-- Top-left Options Panel Toggle -->
+  <button id="show-options" class="fixed top-4 left-4 z-50 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg shadow-md">
+    ☰ Options
   </button>
 
-  <!-- Bookmarks Panel -->
-  <div id="bookmarks-panel" class="fixed top-16 left-4 z-50 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-lg shadow-md hidden w-64 max-h-[80vh] overflow-auto">
-    <h3 class="font-bold mb-2">Bookmarked Courses</h3>
-    <ul id="bookmarks-list" class="space-y-1"></ul>
-    <button id="close-bookmarks" class="mt-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded-lg w-full">Close</button>
-  </div>
-
-  <!-- Controls -->
+  <!-- Main Content -->
   <main class="container mx-auto px-4 py-6 flex-1">
+    <!-- Term & Subject Selects -->
     <div class="flex flex-col md:flex-row gap-4 mb-4">
-      <!-- Term & Subject Selects -->
       <div class="flex-1">
         <label for="term-select" class="block font-semibold mb-1">Select a Term</label>
         <select id="term-select" disabled class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm p-2">
