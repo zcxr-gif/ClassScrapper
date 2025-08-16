@@ -1,0 +1,14 @@
+# Dependencies
+/node_modules
+
+# Database file from our server
+/server/course_cache.sqlite
+
+# Environment variables (if you add any later)
+.env
+.env.local
+
+# Build folders and logs
+/build
+/dist
+npm-debug.log

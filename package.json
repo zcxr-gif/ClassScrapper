@@ -1,0 +1,31 @@
+{
+  "name": "course-finder-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A web scraping API for Farmingdale State College course data.",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zcxr-gif/market_analyzer_backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zcxr-gif/market_analyzer_backend/issues"
+  },
+  "homepage": "https://github.com/zcxr-gif/market_analyzer_backend#readme",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "axios-cookiejar-support": "^5.0.2",
+    "cheerio": "^1.0.0-rc.12",
+    "express": "^4.19.2",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "tough-cookie": "^4.1.4"
+  }
+}
