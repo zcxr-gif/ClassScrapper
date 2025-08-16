@@ -12,6 +12,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let termsData = [];
 
+  // --- Subject mapping (code → full name) ---
+  const subjectMap = {
+    BIO: "Biology",
+    ANT: "Anthropology",
+    CHEM: "Chemistry",
+    ENG: "English",
+    MAT: "Mathematics",
+    CSC: "Computer Science",
+    PSY: "Psychology",
+    SOC: "Sociology",
+    // ➕ Add more as needed
+  };
+
   // --- Dark mode persistence ---
   if (localStorage.getItem('theme') === 'dark') {
     root.classList.add('dark');
@@ -73,10 +86,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function populateSubjects(subjects) {
     subjectSelect.innerHTML = '<option value="">Select a Subject</option>';
-    subjects.forEach(subj => {
+    subjects.forEach(code => {
       const option = document.createElement('option');
-      option.value = subj;
-      option.textContent = subj; // could later map to full subject names
+      option.value = code;
+      const fullName = subjectMap[code] || "Unknown Subject";
+      option.textContent = `${code} – ${fullName}`;
       subjectSelect.appendChild(option);
     });
   }
@@ -106,6 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     courses.forEach(course => {
+      // Extract the course number from the courseName (e.g., "ANT 100")
+      const courseNumberMatch = course.courseName.match(/\d{3}/);
+      const courseNumber = courseNumberMatch ? courseNumberMatch[0] : "";
+
       const scheduleInfo = course.schedule.map(s => {
         const location = s.where.toUpperCase().includes("ONLINE")
           ? "Online"
@@ -118,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       card.innerHTML = `
         <div>
-          <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-400">${course.courseName} (${course.section})</h3>
+          <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-400">${course.subjectCode} ${courseNumber} – ${course.courseName}</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400">CRN: ${course.crn}</p>
           <p class="mt-1 font-medium">Instructor: ${course.instructor}</p>
           <div class="mt-2 space-y-1">${scheduleInfo}</div>
@@ -159,19 +177,34 @@ document.addEventListener('DOMContentLoaded', () => {
     modalTitle.textContent = details.title;
 
     let seats = details.seats?.capacity
-      ? `<p><strong>Seats:</strong> ${details.seats.remaining} / ${details.seats.capacity}</p>`
-      : `<p>Seats: Not available</p>`;
+      ? `
+        <div>
+          <p class="font-semibold">Seats</p>
+          <p>Total: ${details.seats.capacity}</p>
+          <p>Taken: ${details.seats.actual}</p>
+          <p>Remaining: ${details.seats.remaining}</p>
+        </div>`
+      : `<div><p class="font-semibold">Seats</p><p>Not available</p></div>`;
 
     let waitlist = details.waitlist?.capacity
-      ? `<p><strong>Waitlist:</strong> ${details.waitlist.remaining} / ${details.waitlist.capacity}</p>`
-      : `<p>Waitlist: Not available</p>`;
+      ? `
+        <div>
+          <p class="font-semibold">Waitlist</p>
+          <p>Total: ${details.waitlist.capacity}</p>
+          <p>Taken: ${details.waitlist.actual}</p>
+          <p>Remaining: ${details.waitlist.remaining}</p>
+        </div>`
+      : `<div><p class="font-semibold">Waitlist</p><p>Not available</p></div>`;
 
     modalBody.innerHTML = `
-      <p><strong>Term:</strong> ${details.associatedTerm}</p>
-      <p><strong>Levels:</strong> ${details.levels}</p>
-      <p><strong>Credits:</strong> ${details.credits}</p>
-      ${seats}
-      ${waitlist}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <p><span class="font-semibold">Term:</span> ${details.associatedTerm}</p>
+          <p><span class="font-semibold">Levels:</span> ${details.levels}</p>
+          <p><span class="font-semibold">Credits:</span> ${details.credits}</p>
+        </div>
+        <div class="flex gap-4">${seats}${waitlist}</div>
+      </div>
     `;
     modal.classList.remove('hidden');
   }
