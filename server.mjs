@@ -1,4 +1,3 @@
-// server.mjs
 import express from "express";
 import axios from "axios";
 import { wrapper } from "axios-cookiejar-support";
@@ -45,7 +44,7 @@ function hashSchedule(schedule) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-// --- Helper Functions (Original Scraping Logic) ---
+// --- Helper Functions (Scraping Logic) ---
 async function fetchTerms() {
   const jar = new CookieJar();
   const client = wrapper(axios.create({ jar }));
@@ -250,7 +249,6 @@ async function fetchCourseDetails(termCode, crn) {
 }
 
 // --- API Endpoints ---
-
 app.get("/terms", async (req, res) => {
   const cacheKey = "all_terms_with_subjects";
   try {
@@ -418,6 +416,56 @@ async function pollWatchedCourses() {
 cron.schedule('*/5 * * * *', () => {
   console.log('🕒 Polling watched courses...');
   pollWatchedCourses();
+});
+
+// --- Cron Job: Refresh all course data hourly ---
+async function refreshAllCourses() {
+  try {
+    console.log('🕒 Starting hourly full course data refresh...');
+    
+    const terms = await fetchTerms();
+    for (const term of terms) {
+      const subjects = await fetchSubjects(term.code);
+      for (const subject of subjects) {
+        try {
+          const jar = new CookieJar();
+          const client = wrapper(axios.create({ jar }));
+          await client.get("https://oasis.farmingdale.edu/pls/prod/bwckschd.p_disp_dyn_sched");
+          
+          const courses = await getAllCoursesForSubject(term.code, subject, client);
+          const cacheKey = `courses_${term.code}_${subject}`;
+          await saveToCache(db, cacheKey, courses);
+          console.log(`✅ Cached ${courses.length} courses for ${subject} (${term.code})`);
+        } catch (err) {
+          console.error(`❌ Failed to fetch courses for ${subject} (${term.code}):`, err.message);
+        }
+      }
+
+      // Optionally cache all courses for the term
+      try {
+        const cacheKeyAll = `allcourses_${term.code}`;
+        const allCourses = [];
+        for (const subject of subjects) {
+          const cacheKey = `courses_${term.code}_${subject}`;
+          const cached = await getFromCache(db, cacheKey);
+          if (cached) allCourses.push(...cached);
+        }
+        await saveToCache(db, cacheKeyAll, allCourses);
+        console.log(`✅ Cached all courses for term ${term.code}`);
+      } catch (err) {
+        console.error(`❌ Failed to cache all courses for term ${term.code}:`, err.message);
+      }
+    }
+
+    console.log('🕒 Hourly course refresh completed.');
+  } catch (err) {
+    console.error('❌ Error during hourly course refresh:', err.message);
+  }
+}
+
+// Schedule the hourly refresh (minute 0 of every hour)
+cron.schedule('0 * * * *', () => {
+  refreshAllCourses();
 });
 
 // --- Start Server ---
