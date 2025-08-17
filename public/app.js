@@ -28,6 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
   optionsToggle.textContent = '☰ Options';
   document.body.appendChild(optionsToggle);
 
+  // --- Schedule Toggle Button (new) ---
+  const scheduleToggle = document.createElement('button');
+  scheduleToggle.id = 'schedule-toggle';
+  scheduleToggle.className = 'fixed top-4 left-36 z-50 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-lg transition';
+  scheduleToggle.textContent = '🗓️ View Schedule';
+  document.body.appendChild(scheduleToggle);
+
   const optionsPanel = document.createElement('div');
   optionsPanel.id = 'options-panel';
   optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-72 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
@@ -73,6 +80,18 @@ document.addEventListener('DOMContentLoaded', () => {
     BUS: 'Business', CHM: 'Chemistry', CSC: 'Computer Science'
   };
   const subjectColorMap = { ANT: 'bg-red-400', ARC: 'bg-green-400', ART: 'bg-blue-400', AIM: 'bg-yellow-400', AVN: 'bg-purple-400', BIO: 'bg-pink-400', BUS: 'bg-indigo-400', CHM: 'bg-teal-400', CSC: 'bg-orange-400' };
+
+  // --- Schedule config (new) ---
+  const SCHEDULE_START_HOUR = 7; // 7 AM
+  const SCHEDULE_END_HOUR = 22;  // 10 PM
+  const SLOT_MINUTES = 15;       // 15-minute slots
+  const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES; // should be 60
+
+  // Create schedule container (hidden by default)
+  const scheduleContainer = document.createElement('div');
+  scheduleContainer.id = 'schedule-container';
+  scheduleContainer.className = 'hidden p-4';
+  document.body.appendChild(scheduleContainer);
 
   // --- Fetch terms ---
   fetch('/terms')
@@ -355,4 +374,319 @@ document.addEventListener('DOMContentLoaded', () => {
 
     displayCourses(filtered);
   }
+
+  // -----------------------
+  // --- Schedule helpers ---
+  // -----------------------
+
+  // Parse day strings into array of indices 0..4 (Mon..Fri)
+  function parseDaysString(daysStr) {
+    if (!daysStr) return [];
+    const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
+    const days = new Set();
+
+    // Common letter codes: M T W R F
+    if (s.includes('M')) days.add(0);
+    if (s.includes('TU') || s.includes('TUE') || /(^|[^A-Z])T(?!H)/.test(s)) days.add(1);
+    if (s.includes('W')) days.add(2);
+    if (s.includes('TH') || s.includes('R')) { // TH or R for Thursday
+      // if R appears as part of 'TR' that's okay - treat 'R' as Thursday
+      days.add(3);
+    }
+    if (s.includes('F')) days.add(4);
+
+    // Also handle full words like MON, TUE, WED, THU, FRI
+    if (s.includes('MON')) days.add(0);
+    if (s.includes('TUE') || s.includes('TUES')) days.add(1);
+    if (s.includes('WED')) days.add(2);
+    if (s.includes('THU') || s.includes('THUR')) days.add(3);
+    if (s.includes('FRI')) days.add(4);
+
+    return Array.from(days).sort((a,b)=>a-b);
+  }
+
+  // Parse a time string like "10:00AM - 11:15AM" into minutes since midnight
+  function parseTimeStr(timeStr) {
+    if (!timeStr || /TBA|ARR|TBD/i.test(timeStr)) return null;
+    // Try to find two time tokens
+    const times = [];
+    // match hh:mm AM/PM or h:mmAM/PM or hhAM/PM
+    const regex = /(\d{1,2}(?::\d{2})?\s*[AaPp][Mm]?)/g;
+    let m;
+    while ((m = regex.exec(timeStr)) !== null) {
+      times.push(m[1]);
+    }
+    // fallback: maybe they used 24-hour like 13:00-14:15
+    if (times.length < 2) {
+      const regex24 = /(\d{1,2}:\d{2})/g;
+      while ((m = regex24.exec(timeStr)) !== null) times.push(m[1]);
+    }
+    if (times.length < 2) return null;
+
+    function toMinutes(tok) {
+      tok = tok.trim().toUpperCase();
+      // ensure AM/PM present if missing: assume AM if hour < 7? This is guessy; prefer explicit. We'll try to parse flexibly:
+      const ampmMatch = tok.match(/([AP]M)$/);
+      if (!ampmMatch) {
+        // if hour <= 12 but ambiguous, assume AM for early hours (<=11) and PM for typical afternoon times (>=12)
+        // But more robust approach: if hour between 7 and 23, keep as-is in 24h
+        // Try parse as 24h first:
+        const parts = tok.split(':');
+        if (parts.length === 2) {
+          const hh = parseInt(parts[0],10);
+          const mm = parseInt(parts[1],10);
+          if (!isNaN(hh) && !isNaN(mm)) {
+            // if hh between 0..23 treat as 24h
+            if (hh >= 0 && hh <= 23) return hh*60 + mm;
+          }
+        }
+        // fallback: assume AM if hour < 7 (early/morning); otherwise PM for afternoon/evening
+        const plain = tok.replace(/\s/g,'').replace(/AM|PM/,'');
+        const hparts = plain.split(':');
+        const hh = parseInt(hparts[0],10);
+        const mm = (hparts[1] ? parseInt(hparts[1],10) : 0);
+        if (isNaN(hh)) return null;
+        if (hh >= 7 && hh <= 11) return hh*60 + mm;
+        // assume PM for hours 12..11? We'll add heuristic:
+        if (hh >= 12 && hh <= 23) return hh*60 + mm;
+        return (hh + 12) * 60 + mm;
+      } else {
+        // has AM/PM
+        const ampm = ampmMatch[0];
+        const p = tok.replace(/\s*[AP]M$/,'');
+        const parts = p.split(':');
+        let hh = parseInt(parts[0],10);
+        const mm = (parts[1] ? parseInt(parts[1],10) : 0);
+        if (ampm === 'PM' && hh !== 12) hh += 12;
+        if (ampm === 'AM' && hh === 12) hh = 0;
+        return hh*60 + mm;
+      }
+    }
+
+    const start = toMinutes(times[0]);
+    const end = toMinutes(times[1]);
+    if (start == null || end == null) return null;
+    return { start, end };
+  }
+
+  // Create the schedule grid skeleton
+  function createScheduleSkeleton() {
+    scheduleContainer.innerHTML = ''; // clear
+
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'mb-2 flex items-center gap-4';
+    header.innerHTML = `
+      <h2 class="text-2xl font-semibold">Weekly Schedule Preview</h2>
+      <div class="ml-auto flex gap-2">
+        <button id="back-to-list" class="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">◀️ Back to List</button>
+      </div>
+    `;
+    scheduleContainer.appendChild(header);
+
+    // Grid container
+    const gridWrap = document.createElement('div');
+    gridWrap.className = 'w-full overflow-auto border rounded bg-white dark:bg-gray-800 p-2';
+    // We will build as a CSS grid: first column times, next 5 columns Mon-Fri
+    const grid = document.createElement('div');
+    grid.id = 'schedule-grid';
+    grid.className = 'relative';
+    // create header row for days
+    const dayHeader = document.createElement('div');
+    dayHeader.className = 'grid grid-cols-6 gap-0 sticky top-0 bg-white dark:bg-gray-800 z-10';
+    dayHeader.style.gridTemplateColumns = '120px repeat(5, minmax(200px, 1fr))';
+    dayHeader.innerHTML = `
+      <div class="p-2 border-b text-sm text-gray-600 dark:text-gray-300">Time</div>
+      <div class="p-2 border-b text-sm text-center font-medium">Monday</div>
+      <div class="p-2 border-b text-sm text-center font-medium">Tuesday</div>
+      <div class="p-2 border-b text-sm text-center font-medium">Wednesday</div>
+      <div class="p-2 border-b text-sm text-center font-medium">Thursday</div>
+      <div class="p-2 border-b text-sm text-center font-medium">Friday</div>
+    `;
+    gridWrap.appendChild(dayHeader);
+
+    // Main grid body, rows = SLOTS_PER_DAY
+    const body = document.createElement('div');
+    body.className = 'grid grid-cols-6';
+    body.style.gridTemplateColumns = '120px repeat(5, minmax(200px, 1fr))';
+    // create rows
+    for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
+      // time column cell
+      const timeCell = document.createElement('div');
+      timeCell.className = 'p-1 text-xs text-gray-600 dark:text-gray-400 border-b';
+      if (slot % 4 === 0) {
+        // on the hour
+        const hour = SCHEDULE_START_HOUR + Math.floor(slot / 4);
+        const label = `${(hour % 12 === 0) ? 12 : hour % 12}:${('00')} ${(hour >= 12) ? 'PM' : 'AM'}`;
+        timeCell.textContent = label;
+      }
+      body.appendChild(timeCell);
+
+      // five day slots for that time
+      for (let day = 0; day < 5; day++) {
+        const slotCell = document.createElement('div');
+        slotCell.className = 'relative border-b min-h-[22px]'; // height per slot, tweakable
+        slotCell.dataset.slot = slot;
+        slotCell.dataset.day = day;
+        // create inner container for positioning course blocks absolutely
+        const inner = document.createElement('div');
+        inner.className = 'absolute inset-0';
+        slotCell.appendChild(inner);
+        body.appendChild(slotCell);
+      }
+    }
+
+    gridWrap.appendChild(body);
+    scheduleContainer.appendChild(gridWrap);
+
+    // TBA list
+    const tbaWrap = document.createElement('div');
+    tbaWrap.id = 'tba-courses';
+    tbaWrap.className = 'mt-4';
+    tbaWrap.innerHTML = `<h3 class="text-lg font-medium mb-2">TBA / Unscheduled Courses</h3><div id="tba-list" class="space-y-2"></div>`;
+    scheduleContainer.appendChild(tbaWrap);
+
+    // attach back to list handler
+    scheduleContainer.querySelector('#back-to-list').addEventListener('click', () => toggleSchedule(false));
+  }
+
+  // Convert start minute (since midnight) to slot index relative to start hour
+  function minutesToSlotIndex(mins) {
+    return Math.floor((mins - SCHEDULE_START_HOUR*60) / SLOT_MINUTES);
+  }
+
+  // Build schedule from courses list
+  function buildSchedule(courses) {
+    createScheduleSkeleton();
+    const tbaListEl = scheduleContainer.querySelector('#tba-list');
+
+    // clear possible old blocks
+    // We'll add absolutely-positioned blocks inside selected day cell's inner container.
+    // To compute position and height: count number of slots per day; each slot cell has fixed height by CSS (min-h-22px). We'll compute offsets using slot element heights.
+    const sampleSlot = scheduleContainer.querySelector('[data-slot="0"][data-day="0"]');
+    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 22; // fallback
+
+    courses.forEach(course => {
+      // If course has no schedule or schedule entries that are TBA, add to TBA list
+      if (!course.schedule || !course.schedule.length) {
+        addCourseToTBA(course, tbaListEl);
+        return;
+      }
+      let placedAny = false;
+      course.schedule.forEach(s => {
+        if (!s || !s.days || !s.time || /TBA|ARR|TBD/i.test(s.time) || /TBA|TBD|ARR/i.test(s.days)) {
+          return;
+        }
+        const days = parseDaysString(s.days);
+        const timeRange = parseTimeStr(s.time);
+        if (!days.length || !timeRange) {
+          return;
+        }
+        const { start, end } = timeRange;
+        // clamp to schedule bounds
+        if (end <= SCHEDULE_START_HOUR*60 || start >= SCHEDULE_END_HOUR*60) {
+          // outside visible schedule -> treat as TBA/skip
+          return;
+        }
+        const clampedStart = Math.max(start, SCHEDULE_START_HOUR*60);
+        const clampedEnd = Math.min(end, SCHEDULE_END_HOUR*60);
+        const slotStart = minutesToSlotIndex(clampedStart);
+        const slotEnd = minutesToSlotIndex(clampedEnd);
+        const spanSlots = Math.max(1, Math.ceil((clampedEnd - clampedStart) / SLOT_MINUTES));
+
+        days.forEach(dayIndex => {
+          // find the cell for slotStart and dayIndex
+          const targetCell = scheduleContainer.querySelector(`[data-slot="${slotStart}"][data-day="${dayIndex}"]`);
+          if (!targetCell) return;
+          const inner = targetCell.firstElementChild; // absolute container
+          // create block
+          const block = document.createElement('div');
+          const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-300';
+          block.className = `${colorClass} dark:bg-opacity-80 text-white rounded p-1 absolute left-1 right-1 overflow-hidden shadow cursor-pointer`;
+          // compute top offset within the slot cell if start doesn't align exactly to slot boundary
+          const startOffsetMinutes = clampedStart - (SCHEDULE_START_HOUR*60 + slotStart * SLOT_MINUTES);
+          const topPx = (startOffsetMinutes / SLOT_MINUTES) * slotHeight;
+          const heightPx = spanSlots * slotHeight - 4; // small gap
+          block.style.top = `${topPx}px`;
+          block.style.height = `${Math.max(20, heightPx)}px`;
+          block.style.zIndex = 20;
+          // content
+          const courseNumberMatch = course.courseName.match(/\d{3}/);
+          const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+          block.innerHTML = `
+            <div class="text-xs font-semibold leading-tight">${course.subjectCode} ${courseNumber} • ${course.crn}</div>
+            <div class="text-xs truncate">${course.courseName}</div>
+            <div class="text-[11px] opacity-90">${s.time} • ${course.instructor}</div>
+          `;
+          // click opens modal details
+          block.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            // prefer using termSelect.value if available, fallback to first loaded term
+            fetchCourseDetails(termSelect.value, course.crn);
+          });
+
+          // append to inner container
+          inner.appendChild(block);
+          placedAny = true;
+        });
+      });
+
+      if (!placedAny) addCourseToTBA(course, tbaListEl);
+    });
+
+    // If no TBA, show message
+    if (!tbaListEl.childElementCount) {
+      tbaListEl.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
+    }
+  }
+
+  function addCourseToTBA(course, tbaListEl) {
+    const li = document.createElement('div');
+    li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
+    const courseNumberMatch = course.courseName.match(/\d{3}/);
+    const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+    li.innerHTML = `
+      <div>
+        <div class="font-semibold">${course.subjectCode} ${courseNumber} • ${course.courseName}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-300">${course.instructor} • CRN: ${course.crn}</div>
+      </div>
+      <div class="flex gap-2">
+        <button class="small-details px-2 py-1 rounded bg-blue-600 text-white text-sm">Details</button>
+        <button class="small-add px-2 py-1 rounded bg-green-600 text-white text-sm">Add</button>
+      </div>
+    `;
+    li.querySelector('.small-details').addEventListener('click', () => fetchCourseDetails(termSelect.value, course.crn));
+    // small-add could, for example, scroll to the list and highlight or do something; for now keep placeholder
+    li.querySelector('.small-add').addEventListener('click', () => {
+      // scroll to list and highlight card if present
+      const card = Array.from(coursesContainer.querySelectorAll('[data-crn]')).find(c => c.dataset.crn === String(course.crn));
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('ring-4', 'ring-yellow-300');
+        setTimeout(() => card.classList.remove('ring-4', 'ring-yellow-300'), 1600);
+      }
+    });
+    tbaListEl.appendChild(li);
+  }
+
+  // Toggle schedule on/off
+  function toggleSchedule(show) {
+    if (show) {
+      // build schedule from currently loaded allCourses
+      scheduleToggle.textContent = '📋 Back to List';
+      coursesContainer.classList.add('hidden');
+      scheduleContainer.classList.remove('hidden');
+      buildSchedule(allCourses);
+    } else {
+      scheduleToggle.textContent = '🗓️ View Schedule';
+      scheduleContainer.classList.add('hidden');
+      coursesContainer.classList.remove('hidden');
+    }
+  }
+
+  scheduleToggle.addEventListener('click', () => {
+    const showing = !scheduleContainer.classList.contains('hidden');
+    toggleSchedule(!showing);
+  });
+
 });
