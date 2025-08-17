@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => { 
+document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
   const coursesContainer = document.getElementById('courses-container');
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const SCHEDULE_START_HOUR = 7; // 7 AM
   const SCHEDULE_END_HOUR = 22;  // 10 PM
   const SLOT_MINUTES = 15;       // 15-minute slots
-  const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES; // should be 60
+  const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES;
 
   // Create schedule container (hidden by default)
   const scheduleContainer = document.createElement('div');
@@ -385,17 +385,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
     const days = new Set();
 
-    // Common letter codes: M T W R F
     if (s.includes('M')) days.add(0);
     if (s.includes('TU') || s.includes('TUE') || /(^|[^A-Z])T(?!H)/.test(s)) days.add(1);
     if (s.includes('W')) days.add(2);
-    if (s.includes('TH') || s.includes('R')) { // TH or R for Thursday
-      // if R appears as part of 'TR' that's okay - treat 'R' as Thursday
+    if (s.includes('TH') || s.includes('R')) {
       days.add(3);
     }
     if (s.includes('F')) days.add(4);
-
-    // Also handle full words like MON, TUE, WED, THU, FRI
     if (s.includes('MON')) days.add(0);
     if (s.includes('TUE') || s.includes('TUES')) days.add(1);
     if (s.includes('WED')) days.add(2);
@@ -408,15 +404,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Parse a time string like "10:00AM - 11:15AM" into minutes since midnight
   function parseTimeStr(timeStr) {
     if (!timeStr || /TBA|ARR|TBD/i.test(timeStr)) return null;
-    // Try to find two time tokens
     const times = [];
-    // match hh:mm AM/PM or h:mmAM/PM or hhAM/PM
     const regex = /(\d{1,2}(?::\d{2})?\s*[AaPp][Mm]?)/g;
     let m;
     while ((m = regex.exec(timeStr)) !== null) {
       times.push(m[1]);
     }
-    // fallback: maybe they used 24-hour like 13:00-14:15
     if (times.length < 2) {
       const regex24 = /(\d{1,2}:\d{2})/g;
       while ((m = regex24.exec(timeStr)) !== null) times.push(m[1]);
@@ -425,33 +418,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function toMinutes(tok) {
       tok = tok.trim().toUpperCase();
-      // ensure AM/PM present if missing: assume AM if hour < 7? This is guessy; prefer explicit. We'll try to parse flexibly:
       const ampmMatch = tok.match(/([AP]M)$/);
       if (!ampmMatch) {
-        // if hour <= 12 but ambiguous, assume AM for early hours (<=11) and PM for typical afternoon times (>=12)
-        // But more robust approach: if hour between 7 and 23, keep as-is in 24h
-        // Try parse as 24h first:
         const parts = tok.split(':');
         if (parts.length === 2) {
           const hh = parseInt(parts[0],10);
           const mm = parseInt(parts[1],10);
-          if (!isNaN(hh) && !isNaN(mm)) {
-            // if hh between 0..23 treat as 24h
-            if (hh >= 0 && hh <= 23) return hh*60 + mm;
-          }
+          if (!isNaN(hh) && !isNaN(mm) && hh >= 0 && hh <= 23) return hh*60 + mm;
         }
-        // fallback: assume AM if hour < 7 (early/morning); otherwise PM for afternoon/evening
         const plain = tok.replace(/\s/g,'').replace(/AM|PM/,'');
         const hparts = plain.split(':');
         const hh = parseInt(hparts[0],10);
         const mm = (hparts[1] ? parseInt(hparts[1],10) : 0);
         if (isNaN(hh)) return null;
         if (hh >= 7 && hh <= 11) return hh*60 + mm;
-        // assume PM for hours 12..11? We'll add heuristic:
         if (hh >= 12 && hh <= 23) return hh*60 + mm;
         return (hh + 12) * 60 + mm;
       } else {
-        // has AM/PM
         const ampm = ampmMatch[0];
         const p = tok.replace(/\s*[AP]M$/,'');
         const parts = p.split(':');
@@ -468,85 +451,77 @@ document.addEventListener('DOMContentLoaded', () => {
     if (start == null || end == null) return null;
     return { start, end };
   }
-
-  // Create the schedule grid skeleton
+  
+  // =========================================================================
+  // === THIS IS THE UPDATED FUNCTION FOR A NON-SCROLLING, COMPACT VIEW ===
+  // =========================================================================
   function createScheduleSkeleton() {
     scheduleContainer.innerHTML = ''; // clear
-
-    // Header row
+  
     const header = document.createElement('div');
     header.className = 'mb-2 flex items-center gap-4';
     header.innerHTML = `
-      <h2 class="text-2xl font-semibold">Weekly Schedule Preview</h2>
+      <h2 class="text-2xl font-semibold">Weekly Schedule Preview (Compact)</h2>
       <div class="ml-auto flex gap-2">
         <button id="back-to-list" class="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">◀️ Back to List</button>
       </div>
     `;
     scheduleContainer.appendChild(header);
-
-    // Grid container
+  
     const gridWrap = document.createElement('div');
-    gridWrap.className = 'w-full overflow-auto border rounded bg-white dark:bg-gray-800 p-2';
-    // We will build as a CSS grid: first column times, next 5 columns Mon-Fri
+    // Removed max-height and overflow to let it take its natural (compact) size
+    gridWrap.className = 'relative border rounded-lg bg-white dark:bg-gray-800 p-2 overflow-x-auto'; 
+  
     const grid = document.createElement('div');
     grid.id = 'schedule-grid';
-    grid.className = 'relative';
-    // create header row for days
-    const dayHeader = document.createElement('div');
-    dayHeader.className = 'grid grid-cols-6 gap-0 sticky top-0 bg-white dark:bg-gray-800 z-10';
-    dayHeader.style.gridTemplateColumns = '120px repeat(5, minmax(200px, 1fr))';
-    dayHeader.innerHTML = `
-      <div class="p-2 border-b text-sm text-gray-600 dark:text-gray-300">Time</div>
-      <div class="p-2 border-b text-sm text-center font-medium">Monday</div>
-      <div class="p-2 border-b text-sm text-center font-medium">Tuesday</div>
-      <div class="p-2 border-b text-sm text-center font-medium">Wednesday</div>
-      <div class="p-2 border-b text-sm text-center font-medium">Thursday</div>
-      <div class="p-2 border-b text-sm text-center font-medium">Friday</div>
+    grid.className = 'grid';
+    grid.style.gridTemplateColumns = '80px repeat(5, minmax(150px, 1fr))';
+  
+    // --- Grid Header (no longer sticky) ---
+    grid.innerHTML = `
+      <div class="p-1 border-b text-sm font-medium bg-white dark:bg-gray-800">Time</div>
+      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Monday</div>
+      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Tuesday</div>
+      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Wednesday</div>
+      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Thursday</div>
+      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Friday</div>
     `;
-    gridWrap.appendChild(dayHeader);
-
-    // Main grid body, rows = SLOTS_PER_DAY
-    const body = document.createElement('div');
-    body.className = 'grid grid-cols-6';
-    body.style.gridTemplateColumns = '120px repeat(5, minmax(200px, 1fr))';
-    // create rows
+  
+    // --- Grid Body Rows with very small height ---
     for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
-      // time column cell
       const timeCell = document.createElement('div');
-      timeCell.className = 'p-1 text-xs text-gray-600 dark:text-gray-400 border-b';
-      if (slot % 4 === 0) {
-        // on the hour
+      timeCell.className = 'p-1 text-[10px] text-gray-500 dark:text-gray-400 border-b bg-white dark:bg-gray-800';
+      
+      if (slot % 4 === 0) { // On the hour
         const hour = SCHEDULE_START_HOUR + Math.floor(slot / 4);
-        const label = `${(hour % 12 === 0) ? 12 : hour % 12}:${('00')} ${(hour >= 12) ? 'PM' : 'AM'}`;
+        const label = `${(hour % 12 === 0) ? 12 : hour % 12} ${hour >= 12 ? 'p' : 'a'}`; // Abbreviated
         timeCell.textContent = label;
+        timeCell.classList.add('font-semibold', 'text-gray-700', 'dark:text-gray-200');
       }
-      body.appendChild(timeCell);
-
-      // five day slots for that time
+      grid.appendChild(timeCell);
+  
       for (let day = 0; day < 5; day++) {
         const slotCell = document.createElement('div');
-        slotCell.className = 'relative border-b min-h-[22px]'; // height per slot, tweakable
+        // *** KEY CHANGE: Minimum height is drastically reduced ***
+        slotCell.className = 'relative border-b min-h-[10px]'; 
         slotCell.dataset.slot = slot;
         slotCell.dataset.day = day;
-        // create inner container for positioning course blocks absolutely
         const inner = document.createElement('div');
         inner.className = 'absolute inset-0';
         slotCell.appendChild(inner);
-        body.appendChild(slotCell);
+        grid.appendChild(slotCell);
       }
     }
-
-    gridWrap.appendChild(body);
+  
+    gridWrap.appendChild(grid);
     scheduleContainer.appendChild(gridWrap);
-
-    // TBA list
+  
     const tbaWrap = document.createElement('div');
     tbaWrap.id = 'tba-courses';
     tbaWrap.className = 'mt-4';
     tbaWrap.innerHTML = `<h3 class="text-lg font-medium mb-2">TBA / Unscheduled Courses</h3><div id="tba-list" class="space-y-2"></div>`;
     scheduleContainer.appendChild(tbaWrap);
-
-    // attach back to list handler
+  
     scheduleContainer.querySelector('#back-to-list').addEventListener('click', () => toggleSchedule(false));
   }
 
@@ -560,14 +535,10 @@ document.addEventListener('DOMContentLoaded', () => {
     createScheduleSkeleton();
     const tbaListEl = scheduleContainer.querySelector('#tba-list');
 
-    // clear possible old blocks
-    // We'll add absolutely-positioned blocks inside selected day cell's inner container.
-    // To compute position and height: count number of slots per day; each slot cell has fixed height by CSS (min-h-22px). We'll compute offsets using slot element heights.
     const sampleSlot = scheduleContainer.querySelector('[data-slot="0"][data-day="0"]');
-    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 22; // fallback
+    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 10; // Fallback to compact height
 
     courses.forEach(course => {
-      // If course has no schedule or schedule entries that are TBA, add to TBA list
       if (!course.schedule || !course.schedule.length) {
         addCourseToTBA(course, tbaListEl);
         return;
@@ -583,49 +554,42 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
         const { start, end } = timeRange;
-        // clamp to schedule bounds
         if (end <= SCHEDULE_START_HOUR*60 || start >= SCHEDULE_END_HOUR*60) {
-          // outside visible schedule -> treat as TBA/skip
           return;
         }
         const clampedStart = Math.max(start, SCHEDULE_START_HOUR*60);
         const clampedEnd = Math.min(end, SCHEDULE_END_HOUR*60);
         const slotStart = minutesToSlotIndex(clampedStart);
-        const slotEnd = minutesToSlotIndex(clampedEnd);
         const spanSlots = Math.max(1, Math.ceil((clampedEnd - clampedStart) / SLOT_MINUTES));
 
         days.forEach(dayIndex => {
-          // find the cell for slotStart and dayIndex
           const targetCell = scheduleContainer.querySelector(`[data-slot="${slotStart}"][data-day="${dayIndex}"]`);
           if (!targetCell) return;
-          const inner = targetCell.firstElementChild; // absolute container
-          // create block
+          const inner = targetCell.firstElementChild;
           const block = document.createElement('div');
           const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-300';
           block.className = `${colorClass} dark:bg-opacity-80 text-white rounded p-1 absolute left-1 right-1 overflow-hidden shadow cursor-pointer`;
-          // compute top offset within the slot cell if start doesn't align exactly to slot boundary
+          
           const startOffsetMinutes = clampedStart - (SCHEDULE_START_HOUR*60 + slotStart * SLOT_MINUTES);
           const topPx = (startOffsetMinutes / SLOT_MINUTES) * slotHeight;
-          const heightPx = spanSlots * slotHeight - 4; // small gap
+          const heightPx = spanSlots * slotHeight - 2; // small gap
           block.style.top = `${topPx}px`;
-          block.style.height = `${Math.max(20, heightPx)}px`;
+          block.style.height = `${Math.max(10, heightPx)}px`;
           block.style.zIndex = 20;
-          // content
+
           const courseNumberMatch = course.courseName.match(/\d{3}/);
           const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+          
+          // Use smaller text for compact view
           block.innerHTML = `
-            <div class="text-xs font-semibold leading-tight">${course.subjectCode} ${courseNumber} • ${course.crn}</div>
-            <div class="text-xs truncate">${course.courseName}</div>
-            <div class="text-[11px] opacity-90">${s.time} • ${course.instructor}</div>
+            <div class="text-[10px] font-semibold leading-tight whitespace-nowrap">${course.subjectCode} ${courseNumber}</div>
+            <div class="text-[9px] truncate">${course.courseName}</div>
           `;
-          // click opens modal details
           block.addEventListener('click', (ev) => {
             ev.stopPropagation();
-            // prefer using termSelect.value if available, fallback to first loaded term
             fetchCourseDetails(termSelect.value, course.crn);
           });
 
-          // append to inner container
           inner.appendChild(block);
           placedAny = true;
         });
@@ -634,7 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!placedAny) addCourseToTBA(course, tbaListEl);
     });
 
-    // If no TBA, show message
     if (!tbaListEl.childElementCount) {
       tbaListEl.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
     }
@@ -650,29 +613,17 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="font-semibold">${course.subjectCode} ${courseNumber} • ${course.courseName}</div>
         <div class="text-xs text-gray-600 dark:text-gray-300">${course.instructor} • CRN: ${course.crn}</div>
       </div>
-      <div class="flex gap-2">
+      <div>
         <button class="small-details px-2 py-1 rounded bg-blue-600 text-white text-sm">Details</button>
-        <button class="small-add px-2 py-1 rounded bg-green-600 text-white text-sm">Add</button>
       </div>
     `;
     li.querySelector('.small-details').addEventListener('click', () => fetchCourseDetails(termSelect.value, course.crn));
-    // small-add could, for example, scroll to the list and highlight or do something; for now keep placeholder
-    li.querySelector('.small-add').addEventListener('click', () => {
-      // scroll to list and highlight card if present
-      const card = Array.from(coursesContainer.querySelectorAll('[data-crn]')).find(c => c.dataset.crn === String(course.crn));
-      if (card) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        card.classList.add('ring-4', 'ring-yellow-300');
-        setTimeout(() => card.classList.remove('ring-4', 'ring-yellow-300'), 1600);
-      }
-    });
     tbaListEl.appendChild(li);
   }
 
   // Toggle schedule on/off
   function toggleSchedule(show) {
     if (show) {
-      // build schedule from currently loaded allCourses
       scheduleToggle.textContent = '📋 Back to List';
       coursesContainer.classList.add('hidden');
       scheduleContainer.classList.remove('hidden');
@@ -688,5 +639,4 @@ document.addEventListener('DOMContentLoaded', () => {
     const showing = !scheduleContainer.classList.contains('hidden');
     toggleSchedule(!showing);
   });
-
 });

@@ -11,7 +11,6 @@
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex flex-col text-gray-800 dark:text-gray-200">
 
-  <!-- Header -->
   <header class="bg-blue-700 dark:bg-blue-900 text-white shadow-lg sticky top-0 z-40">
     <div class="container mx-auto py-4 px-4 flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4">
       <div class="flex-1 text-center md:text-left">
@@ -19,7 +18,6 @@
         <p class="text-lg opacity-90">Class Finder 🎓</p>
       </div>
       <div class="flex gap-2 md:gap-4 items-center">
-        <!-- Dark Mode Toggle -->
         <button id="dark-toggle" class="px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition">
           🌙
         </button>
@@ -27,10 +25,8 @@
     </div>
   </header>
 
-  <!-- Main Content -->
   <main class="container mx-auto px-4 py-6 flex-1">
 
-    <!-- Term & Subject Selects -->
     <div class="flex flex-col md:flex-row gap-4 mb-4">
       <div class="flex-1">
         <label for="term-select" class="block font-semibold mb-1">Select a Term 📅</label>
@@ -46,7 +42,6 @@
       </div>
     </div>
 
-    <!-- Search & Filters -->
     <div class="flex flex-col md:flex-row gap-2 mb-6 items-center">
       <input type="text" id="course-search" placeholder="Search by course name, instructor, or CRN 🔍" 
              class="flex-1 p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm focus:outline-none">
@@ -73,36 +68,19 @@
 
       <select id="sort-courses" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
         <option value="">Sort By</option>
-        <option value="courseNumber">Course Number #️⃣</option>
-        <option value="instructor">Instructor 👩‍🏫</option>
-        <option value="seatsRemaining">Seats Remaining 🪑</option>
+        <option value="name">Course Name 🔤</option>
+        <option value="crn">CRN #️⃣</option>
       </select>
     </div>
 
-    <!-- Schedule View Button -->
-    <div class="flex justify-end mb-4">
-      <button id="toggle-schedule" class="px-4 py-2 rounded-lg bg-green-600 text-white shadow hover:bg-green-700 transition">
-        🗓️ View Schedule
-      </button>
-    </div>
-
-    <!-- Schedule Container -->
-    <div id="schedule-container" class="hidden w-full overflow-auto mb-6">
-      <!-- Weekly schedule grid will be rendered here by app.js -->
-    </div>
-
-    <!-- Loading Spinner -->
     <div id="loading-message" class="hidden flex justify-center py-6">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>
 
-    <!-- Courses Container -->
     <div id="courses-container" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- Course cards will be injected here -->
-    </div>
+      </div>
   </main>
 
-  <!-- Details Modal -->
   <div id="details-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl p-6 relative">
       <button class="close-button absolute top-3 right-3 text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 text-xl font-bold">&times;</button>
@@ -111,7 +89,6 @@
     </div>
   </div>
 
-  <!-- App JS -->
   <script src="app.js"></script>
 </body>
 </html>
