@@ -86,11 +86,127 @@ document.addEventListener('DOMContentLoaded', () => {
   let watchedCourses = JSON.parse(localStorage.getItem('watchedCourses') || '[]');
 
   const subjectMap = {
-    ANT: 'Anthropology', ARC: 'Architectural Technology', ART: 'Art History',
-    AIM: 'AI Management', AVN: 'Aviation', BIO: 'Biology',
-    BUS: 'Business', CHM: 'Chemistry', CSC: 'Computer Science'
+    ANT: 'Anthropology',
+    ARC: 'Architectural Technology',
+    ART: 'Art History',
+    AIM: 'Artificial Intelligence Mgmt',
+    AET: 'Automotive Technology',
+    AVN: 'Aviation',
+    BIO: 'Biology',
+    BUS: 'Business',
+    CHM: 'Chemistry',
+    CHI: 'Chinese',
+    CIV: 'Civil Engineering Technology',
+    CSC: 'Computer Science',
+    CPS: 'Computer Security Technology',
+    BCS: 'Computer Systems',
+    CON: 'Construction Management',
+    CRJ: 'Criminal Justice',
+    DEN: 'Dental Hygiene',
+    ECO: 'Economics',
+    EET: 'Electrical Engineering Tech',
+    ETM: 'Engineering Technology Mngmnt',
+    EGL: 'English',
+    ENV: 'Environmental Studies',
+    FYE: 'First Year Experience',
+    FRE: 'French',
+    FRX: 'Freshman Experience',
+    GIS: 'Geographic Information Systems',
+    GEO: 'Geography',
+    GER: 'German',
+    GRO: 'Gerontology',
+    HPW: 'Health Promotion and Wellness',
+    HIS: 'History',
+    HON: 'Honors Program',
+    HOR: 'Horticulture',
+    HUM: 'Humanities',
+    IND: 'Industrial Technology',
+    IXD: 'Interaction Design',
+    ITA: 'Italian',
+    MTH: 'Mathematics',
+    MET: 'Mechanical Engineering Tech',
+    MLS: 'Medical Laboratory Science',
+    MLG: 'Modern Languages',
+    NUR: 'Nursing',
+    NTR: 'Nutrition Science',
+    PHI: 'Philosophy',
+    PED: 'Physical Education',
+    PHY: 'Physics and Physical Science',
+    POL: 'Politics',
+    PCM: 'Professional Communications',
+    PSY: 'Psychology',
+    RAM: 'Research Aligned Mentorship',
+    RUS: 'Russian',
+    STS: 'Science, Tech and Society',
+    SST: 'Security Systems Technology',
+    SOC: 'Sociology',
+    SPA: 'Spanish',
+    SPE: 'Speech',
+    SMT: 'Sport Management',
+    THE: 'Theatre',
+    VIS: 'Visual Communications'
   };
-  const subjectColorMap = { ANT: 'bg-red-400', ARC: 'bg-green-400', ART: 'bg-blue-400', AIM: 'bg-yellow-400', AVN: 'bg-purple-400', BIO: 'bg-pink-400', BUS: 'bg-indigo-400', CHM: 'bg-teal-400', CSC: 'bg-orange-400' };
+  const subjectColorMap = {
+    ANT: 'bg-red-400',
+    ARC: 'bg-green-400',
+    ART: 'bg-blue-400',
+    AIM: 'bg-yellow-400',
+    AET: 'bg-lime-500',
+    AVN: 'bg-purple-400',
+    BIO: 'bg-pink-400',
+    BUS: 'bg-indigo-400',
+    CHM: 'bg-teal-400',
+    CHI: 'bg-red-500',
+    CIV: 'bg-gray-500',
+    CSC: 'bg-orange-400',
+    CPS: 'bg-sky-500',
+    BCS: 'bg-cyan-400',
+    CON: 'bg-amber-500',
+    CRJ: 'bg-rose-500',
+    DEN: 'bg-teal-300',
+    ECO: 'bg-green-500',
+    EET: 'bg-blue-500',
+    ETM: 'bg-violet-400',
+    EGL: 'bg-rose-400',
+    ENV: 'bg-emerald-400',
+    FYE: 'bg-gray-400',
+    FRE: 'bg-blue-300',
+    FRX: 'bg-indigo-300',
+    GIS: 'bg-emerald-600',
+    GEO: 'bg-lime-600',
+    GER: 'bg-amber-400',
+    GRO: 'bg-fuchsia-400',
+    HPW: 'bg-green-300',
+    HIS: 'bg-orange-500',
+    HON: 'bg-yellow-300',
+    HOR: 'bg-lime-400',
+    HUM: 'bg-pink-300',
+    IND: 'bg-cyan-500',
+    IXD: 'bg-sky-400',
+    ITA: 'bg-green-600',
+    MTH: 'bg-indigo-500',
+    MET: 'bg-gray-600',
+    MLS: 'bg-teal-500',
+    MLG: 'bg-red-300',
+    NUR: 'bg-rose-300',
+    NTR: 'bg-lime-300',
+    PHI: 'bg-purple-300',
+    PED: 'bg-sky-300',
+    PHY: 'bg-orange-300',
+    POL: 'bg-indigo-600',
+    PCM: 'bg-fuchsia-500',
+    PSY: 'bg-violet-500',
+    RAM: 'bg-yellow-500',
+    RUS: 'bg-red-600',
+    STS: 'bg-gray-500',
+    SST: 'bg-sky-600',
+    SOC: 'bg-pink-500',
+    SPA: 'bg-orange-600',
+    SPE: 'bg-fuchsia-300',
+    SMT: 'bg-blue-600',
+    THE: 'bg-purple-500',
+    VIS: 'bg-amber-300'
+};
 
   // --- Schedule config ---
   const SCHEDULE_START_HOUR = 7; // 7 AM
@@ -625,6 +741,41 @@ document.addEventListener('DOMContentLoaded', () => {
       tbaListEl.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
     }
   }
+  
+  function parseDaysString(daysStr) {
+    if (!daysStr) return [];
+    const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
+    const days = new Set();
+
+    // Handle unambiguous days first
+    if (s.includes('M')) days.add(0); // Monday
+    if (s.includes('W')) days.add(2); // Wednesday
+    if (s.includes('F')) days.add(4); // Friday
+    if (s.includes('R')) days.add(3); // R is always Thursday
+
+    // Handle T/TH/TR ambiguity based on your feedback.
+    // This structure prioritizes the two-letter Thursday codes.
+    if (s.includes('TH')) {
+      days.add(3);
+    }
+    // Per your request, 'TR' is treated as only Thursday.
+    else if (s.includes('TR')) {
+      days.add(3);
+    }
+    // Only if the string does NOT contain 'TH' or 'TR' will 'T' be counted as Tuesday.
+    else if (s.includes('T')) {
+      days.add(1);
+    }
+
+    // Include full words for extra robustness, though they rarely appear
+    if (s.includes('MON')) days.add(0);
+    if (s.includes('TUE')) days.add(1);
+    if (s.includes('WED')) days.add(2);
+    if (s.includes('THU')) days.add(3);
+    if (s.includes('FRI')) days.add(4);
+
+    return Array.from(days).sort((a,b)=>a-b);
+  }
 
   function addCourseToTBA(course, tbaListEl) {
     const li = document.createElement('div');
@@ -645,22 +796,27 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Toggle schedule on/off
+  // Toggle schedule on/off
   function toggleSchedule(show) {
+    const filterControls = document.getElementById('filter-controls');
+
     if (show) {
       const bookmarkedCourses = bookmarks
         .map(crn => allCourses.find(course => course.crn === crn))
-        .filter(course => course); 
+        .filter(course => course);
 
       if (bookmarkedCourses.length === 0) {
         alert('Please bookmark one or more courses to see them on the schedule.');
         return;
       }
       
+      filterControls.classList.add('hidden'); // HIDE FILTERS
       coursesContainer.classList.add('hidden');
       scheduleContainer.classList.remove('hidden');
       buildSchedule(bookmarkedCourses);
     } else {
       scheduleContainer.classList.add('hidden');
+      filterControls.classList.remove('hidden'); // SHOW FILTERS
       coursesContainer.classList.remove('hidden');
     }
   }
