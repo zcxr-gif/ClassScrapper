@@ -531,12 +531,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Build schedule from courses list
+// Build schedule from courses list
   function buildSchedule(courses) {
     createScheduleSkeleton();
     const tbaListEl = scheduleContainer.querySelector('#tba-list');
 
+    // --- START: CONFLICT DETECTION SETUP ---
+    // Create a 2D array to track which time slots are occupied.
+    // Each cell will hold an array of the course blocks occupying that slot.
+    const scheduleGrid = Array(5).fill(null).map(() => Array(SLOTS_PER_DAY).fill(null).map(() => []));
+    // --- END: CONFLICT DETECTION SETUP ---
+
     const sampleSlot = scheduleContainer.querySelector('[data-slot="0"][data-day="0"]');
-    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 10; // Fallback to compact height
+    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 10;
 
     courses.forEach(course => {
       if (!course.schedule || !course.schedule.length) {
@@ -565,14 +572,15 @@ document.addEventListener('DOMContentLoaded', () => {
         days.forEach(dayIndex => {
           const targetCell = scheduleContainer.querySelector(`[data-slot="${slotStart}"][data-day="${dayIndex}"]`);
           if (!targetCell) return;
+          
           const inner = targetCell.firstElementChild;
           const block = document.createElement('div');
           const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-300';
-          block.className = `${colorClass} dark:bg-opacity-80 text-white rounded p-1 absolute left-1 right-1 overflow-hidden shadow cursor-pointer`;
+          block.className = `${colorClass} dark:bg-opacity-80 text-white rounded p-1 absolute left-1 right-1 overflow-hidden shadow cursor-pointer transition-all duration-200`;
           
           const startOffsetMinutes = clampedStart - (SCHEDULE_START_HOUR*60 + slotStart * SLOT_MINUTES);
           const topPx = (startOffsetMinutes / SLOT_MINUTES) * slotHeight;
-          const heightPx = spanSlots * slotHeight - 2; // small gap
+          const heightPx = spanSlots * slotHeight - 2;
           block.style.top = `${topPx}px`;
           block.style.height = `${Math.max(10, heightPx)}px`;
           block.style.zIndex = 20;
@@ -580,7 +588,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const courseNumberMatch = course.courseName.match(/\d{3}/);
           const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
           
-          // Use smaller text for compact view
           block.innerHTML = `
             <div class="text-[10px] font-semibold leading-tight whitespace-nowrap">${course.subjectCode} ${courseNumber}</div>
             <div class="text-[9px] truncate">${course.courseName}</div>
@@ -589,6 +596,40 @@ document.addEventListener('DOMContentLoaded', () => {
             ev.stopPropagation();
             fetchCourseDetails(termSelect.value, course.crn);
           });
+
+          // --- START: CONFLICT DETECTION LOGIC ---
+          let hasConflict = false;
+          // Loop through all the slots this new class will occupy.
+          for (let i = 0; i < spanSlots; i++) {
+            const currentSlot = slotStart + i;
+            if (currentSlot >= SLOTS_PER_DAY) continue;
+
+            // If the grid cell for this slot already has a class, it's a conflict.
+            if (scheduleGrid[dayIndex][currentSlot].length > 0) {
+              hasConflict = true;
+              // Mark all previously placed classes in this slot as conflicting.
+              scheduleGrid[dayIndex][currentSlot].forEach(conflictingBlock => {
+                conflictingBlock.classList.add('border-4', 'border-red-500');
+                conflictingBlock.title = 'Time conflict detected!';
+                conflictingBlock.style.zIndex = 30;
+              });
+            }
+          }
+
+          // If a conflict was found, also mark the new class block.
+          if (hasConflict) {
+            block.classList.add('border-4', 'border-red-500');
+            block.title = 'Time conflict detected!';
+            block.style.zIndex = 30; // Bring conflicting items to the front
+          }
+
+          // Add the new class block to our tracking grid for future checks.
+          for (let i = 0; i < spanSlots; i++) {
+            const currentSlot = slotStart + i;
+            if (currentSlot >= SLOTS_PER_DAY) continue;
+            scheduleGrid[dayIndex][currentSlot].push(block);
+          }
+          // --- END: CONFLICT DETECTION LOGIC ---
 
           inner.appendChild(block);
           placedAny = true;
@@ -622,12 +663,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Toggle schedule on/off
+ // Toggle schedule on/off
   function toggleSchedule(show) {
     if (show) {
+      // --- START FIX ---
+      // Filter allCourses to get only the objects for bookmarked CRNs
+      const bookmarkedCourses = bookmarks
+        .map(crn => allCourses.find(course => course.crn === crn))
+        .filter(course => course); // Filter out undefined if a bookmark isn't in the current view
+
+      // If no courses are bookmarked, alert the user and stop.
+      if (bookmarkedCourses.length === 0) {
+        alert('Please bookmark one or more courses to see them on the schedule.');
+        return;
+      }
+
       scheduleToggle.textContent = '📋 Back to List';
       coursesContainer.classList.add('hidden');
       scheduleContainer.classList.remove('hidden');
-      buildSchedule(allCourses);
+      
+      // Build the schedule with ONLY the bookmarked courses
+      buildSchedule(bookmarkedCourses);
+      // --- END FIX ---
     } else {
       scheduleToggle.textContent = '🗓️ View Schedule';
       scheduleContainer.classList.add('hidden');
