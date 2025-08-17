@@ -18,6 +18,17 @@
         <p class="text-lg opacity-90">Class Finder 🎓</p>
       </div>
       <div class="flex gap-2 md:gap-4 items-center">
+        
+        <div class="relative" id="menu-container">
+          <button id="menu-toggle-btn" class="px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition flex items-center gap-2">
+            ☰ Menu
+          </button>
+          <div id="menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50">
+            <a href="#" id="menu-options-btn" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">☰ Options Panel</a>
+            <a href="#" id="menu-schedule-btn" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">🗓️ View Schedule</a>
+          </div>
+        </div>
+
         <button id="dark-toggle" class="px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition">
           🌙
         </button>

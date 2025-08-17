@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const darkToggle = document.getElementById('dark-toggle');
   const root = document.documentElement;
 
+  // --- New Menu Elements ---
+  const menuToggleBtn = document.getElementById('menu-toggle-btn');
+  const menuDropdown = document.getElementById('menu-dropdown');
+  const menuOptionsBtn = document.getElementById('menu-options-btn');
+  const menuScheduleBtn = document.getElementById('menu-schedule-btn');
+
   // --- Dark mode persistence ---
   if (localStorage.getItem('theme') === 'dark') {
     root.classList.add('dark');
@@ -21,20 +27,13 @@ document.addEventListener('DOMContentLoaded', () => {
     darkToggle.textContent = root.classList.contains('dark') ? "☀️" : "🌙";
   });
 
-  // --- Options Panel ---
-  const optionsToggle = document.createElement('button');
-  optionsToggle.id = 'options-toggle';
-  optionsToggle.className = 'fixed top-4 left-4 z-50 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition';
-  optionsToggle.textContent = '☰ Options';
-  document.body.appendChild(optionsToggle);
+  // --- New Menu Logic ---
+  menuToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // Prevent the click from immediately closing the menu
+    menuDropdown.classList.toggle('hidden');
+  });
 
-  // --- Schedule Toggle Button (new) ---
-  const scheduleToggle = document.createElement('button');
-  scheduleToggle.id = 'schedule-toggle';
-  scheduleToggle.className = 'fixed top-4 left-36 z-50 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-lg transition';
-  scheduleToggle.textContent = '🗓️ View Schedule';
-  document.body.appendChild(scheduleToggle);
-
+  // --- Options Panel (now a slide-out panel, not fixed button) ---
   const optionsPanel = document.createElement('div');
   optionsPanel.id = 'options-panel';
   optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-72 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
@@ -57,16 +56,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const showBookmarksTab = optionsPanel.querySelector('#show-bookmarks-tab');
   const showWatchedTab = optionsPanel.querySelector('#show-watched-tab');
 
-  optionsToggle.addEventListener('click', () => optionsPanel.classList.toggle('-translate-x-full'));
+  // Event listener for the new menu item to open the options panel
+  menuOptionsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    optionsPanel.classList.remove('-translate-x-full');
+    menuDropdown.classList.add('hidden'); // Close dropdown after clicking
+  });
   closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
 
-  // --- Close options panel when clicking outside ---
+  // --- Close panels when clicking outside ---
   document.addEventListener('click', (e) => {
-    const isClickInside = optionsPanel.contains(e.target) || optionsToggle.contains(e.target);
-    if (!isClickInside) {
+    // Close options panel
+    const isClickInsideOptions = optionsPanel.contains(e.target) || menuOptionsBtn.contains(e.target);
+    if (!isClickInsideOptions) {
       optionsPanel.classList.add('-translate-x-full');
     }
+
+    // Close menu dropdown
+    if (!menuToggleBtn.contains(e.target)) {
+      menuDropdown.classList.add('hidden');
+    }
   });
+
 
   // --- Data ---
   let termsData = [];
@@ -81,13 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const subjectColorMap = { ANT: 'bg-red-400', ARC: 'bg-green-400', ART: 'bg-blue-400', AIM: 'bg-yellow-400', AVN: 'bg-purple-400', BIO: 'bg-pink-400', BUS: 'bg-indigo-400', CHM: 'bg-teal-400', CSC: 'bg-orange-400' };
 
-  // --- Schedule config (new) ---
+  // --- Schedule config ---
   const SCHEDULE_START_HOUR = 7; // 7 AM
   const SCHEDULE_END_HOUR = 22;  // 10 PM
   const SLOT_MINUTES = 15;       // 15-minute slots
   const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES;
 
-  // Create schedule container (hidden by default)
   const scheduleContainer = document.createElement('div');
   scheduleContainer.id = 'schedule-container';
   scheduleContainer.className = 'hidden p-4';
@@ -375,11 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     displayCourses(filtered);
   }
 
-  // -----------------------
   // --- Schedule helpers ---
-  // -----------------------
-
-  // Parse day strings into array of indices 0..4 (Mon..Fri)
   function parseDaysString(daysStr) {
     if (!daysStr) return [];
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
@@ -401,7 +407,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return Array.from(days).sort((a,b)=>a-b);
   }
 
-  // Parse a time string like "10:00AM - 11:15AM" into minutes since midnight
   function parseTimeStr(timeStr) {
     if (!timeStr || /TBA|ARR|TBD/i.test(timeStr)) return null;
     const times = [];
@@ -452,11 +457,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return { start, end };
   }
   
-  // =========================================================================
-  // === THIS IS THE UPDATED FUNCTION FOR A NON-SCROLLING, COMPACT VIEW ===
-  // =========================================================================
   function createScheduleSkeleton() {
-    scheduleContainer.innerHTML = ''; // clear
+    scheduleContainer.innerHTML = ''; 
   
     const header = document.createElement('div');
     header.className = 'mb-2 flex items-center gap-4';
@@ -469,7 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleContainer.appendChild(header);
   
     const gridWrap = document.createElement('div');
-    // Removed max-height and overflow to let it take its natural (compact) size
     gridWrap.className = 'relative border rounded-lg bg-white dark:bg-gray-800 p-2 overflow-x-auto'; 
   
     const grid = document.createElement('div');
@@ -477,7 +478,6 @@ document.addEventListener('DOMContentLoaded', () => {
     grid.className = 'grid';
     grid.style.gridTemplateColumns = '80px repeat(5, minmax(150px, 1fr))';
   
-    // --- Grid Header (no longer sticky) ---
     grid.innerHTML = `
       <div class="p-1 border-b text-sm font-medium bg-white dark:bg-gray-800">Time</div>
       <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Monday</div>
@@ -487,14 +487,13 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Friday</div>
     `;
   
-    // --- Grid Body Rows with very small height ---
     for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
       const timeCell = document.createElement('div');
       timeCell.className = 'p-1 text-[10px] text-gray-500 dark:text-gray-400 border-b bg-white dark:bg-gray-800';
       
-      if (slot % 4 === 0) { // On the hour
+      if (slot % 4 === 0) {
         const hour = SCHEDULE_START_HOUR + Math.floor(slot / 4);
-        const label = `${(hour % 12 === 0) ? 12 : hour % 12} ${hour >= 12 ? 'p' : 'a'}`; // Abbreviated
+        const label = `${(hour % 12 === 0) ? 12 : hour % 12} ${hour >= 12 ? 'p' : 'a'}`;
         timeCell.textContent = label;
         timeCell.classList.add('font-semibold', 'text-gray-700', 'dark:text-gray-200');
       }
@@ -502,7 +501,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
       for (let day = 0; day < 5; day++) {
         const slotCell = document.createElement('div');
-        // *** KEY CHANGE: Minimum height is drastically reduced ***
         slotCell.className = 'relative border-b min-h-[10px]'; 
         slotCell.dataset.slot = slot;
         slotCell.dataset.day = day;
@@ -525,23 +523,15 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleContainer.querySelector('#back-to-list').addEventListener('click', () => toggleSchedule(false));
   }
 
-  // Convert start minute (since midnight) to slot index relative to start hour
   function minutesToSlotIndex(mins) {
     return Math.floor((mins - SCHEDULE_START_HOUR*60) / SLOT_MINUTES);
   }
 
-  // Build schedule from courses list
-// Build schedule from courses list
   function buildSchedule(courses) {
     createScheduleSkeleton();
     const tbaListEl = scheduleContainer.querySelector('#tba-list');
-
-    // --- START: CONFLICT DETECTION SETUP ---
-    // Create a 2D array to track which time slots are occupied.
-    // Each cell will hold an array of the course blocks occupying that slot.
     const scheduleGrid = Array(5).fill(null).map(() => Array(SLOTS_PER_DAY).fill(null).map(() => []));
-    // --- END: CONFLICT DETECTION SETUP ---
-
+    
     const sampleSlot = scheduleContainer.querySelector('[data-slot="0"][data-day="0"]');
     const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 10;
 
@@ -597,17 +587,12 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchCourseDetails(termSelect.value, course.crn);
           });
 
-          // --- START: CONFLICT DETECTION LOGIC ---
           let hasConflict = false;
-          // Loop through all the slots this new class will occupy.
           for (let i = 0; i < spanSlots; i++) {
             const currentSlot = slotStart + i;
             if (currentSlot >= SLOTS_PER_DAY) continue;
-
-            // If the grid cell for this slot already has a class, it's a conflict.
             if (scheduleGrid[dayIndex][currentSlot].length > 0) {
               hasConflict = true;
-              // Mark all previously placed classes in this slot as conflicting.
               scheduleGrid[dayIndex][currentSlot].forEach(conflictingBlock => {
                 conflictingBlock.classList.add('border-4', 'border-red-500');
                 conflictingBlock.title = 'Time conflict detected!';
@@ -616,20 +601,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }
 
-          // If a conflict was found, also mark the new class block.
           if (hasConflict) {
             block.classList.add('border-4', 'border-red-500');
             block.title = 'Time conflict detected!';
-            block.style.zIndex = 30; // Bring conflicting items to the front
+            block.style.zIndex = 30;
           }
 
-          // Add the new class block to our tracking grid for future checks.
           for (let i = 0; i < spanSlots; i++) {
             const currentSlot = slotStart + i;
             if (currentSlot >= SLOTS_PER_DAY) continue;
             scheduleGrid[dayIndex][currentSlot].push(block);
           }
-          // --- END: CONFLICT DETECTION LOGIC ---
 
           inner.appendChild(block);
           placedAny = true;
@@ -663,37 +645,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Toggle schedule on/off
- // Toggle schedule on/off
   function toggleSchedule(show) {
     if (show) {
-      // --- START FIX ---
-      // Filter allCourses to get only the objects for bookmarked CRNs
       const bookmarkedCourses = bookmarks
         .map(crn => allCourses.find(course => course.crn === crn))
-        .filter(course => course); // Filter out undefined if a bookmark isn't in the current view
+        .filter(course => course); 
 
-      // If no courses are bookmarked, alert the user and stop.
       if (bookmarkedCourses.length === 0) {
         alert('Please bookmark one or more courses to see them on the schedule.');
         return;
       }
-
-      scheduleToggle.textContent = '📋 Back to List';
+      
       coursesContainer.classList.add('hidden');
       scheduleContainer.classList.remove('hidden');
-      
-      // Build the schedule with ONLY the bookmarked courses
       buildSchedule(bookmarkedCourses);
-      // --- END FIX ---
     } else {
-      scheduleToggle.textContent = '🗓️ View Schedule';
       scheduleContainer.classList.add('hidden');
       coursesContainer.classList.remove('hidden');
     }
   }
 
-  scheduleToggle.addEventListener('click', () => {
-    const showing = !scheduleContainer.classList.contains('hidden');
-    toggleSchedule(!showing);
+  // Connect the schedule toggle functionality to the new menu item
+  menuScheduleBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const isScheduleVisible = !scheduleContainer.classList.contains('hidden');
+    toggleSchedule(!isScheduleVisible);
+    menuDropdown.classList.add('hidden'); // Close dropdown
   });
 });
