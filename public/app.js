@@ -1,3 +1,8 @@
+// app.js (UPDATED)
+// - Fixes: level & availability filters
+// - UI: cleaner course cards, CRN copy button
+// - Keeps: options panel, schedule view, bookmarks/watch, modal, dark mode
+
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -9,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const darkToggle = document.getElementById('dark-toggle');
   const root = document.documentElement;
 
-  // --- New Menu Elements ---
+  // --- Menu elements ---
   const menuToggleBtn = document.getElementById('menu-toggle-btn');
   const menuDropdown = document.getElementById('menu-dropdown');
   const menuOptionsBtn = document.getElementById('menu-options-btn');
@@ -18,16 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Dark mode persistence ---
   if (localStorage.getItem('theme') === 'dark') {
     root.classList.add('dark');
-    darkToggle.textContent = "☀️";
-  } else darkToggle.textContent = "🌙";
+    darkToggle.textContent = '☀️';
+  } else darkToggle.textContent = '🌙';
 
   darkToggle.addEventListener('click', () => {
     root.classList.toggle('dark');
     localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
-    darkToggle.textContent = root.classList.contains('dark') ? "☀️" : "🌙";
+    darkToggle.textContent = root.classList.contains('dark') ? '☀️' : '🌙';
   });
 
-  // --- New Menu Logic ---
+  // --- Menu toggle ---
   menuToggleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     menuDropdown.classList.toggle('hidden');
@@ -36,17 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Options Panel (slide-out) ---
   const optionsPanel = document.createElement('div');
   optionsPanel.id = 'options-panel';
-  optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-72 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
+  optionsPanel.className = 'fixed top-0 left-0 z-50 h-full w-80 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 shadow-lg transform -translate-x-full transition-transform duration-300';
   optionsPanel.innerHTML = `
     <h3 class="text-xl font-bold mb-2">📚 Your Courses</h3>
     <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-      View your bookmarked and watched courses here. You can remove courses or view details directly.
+      View bookmarked and watched courses. Use ✖ to remove.
     </p>
     <div class="flex gap-2 mb-4">
       <button id="show-bookmarks-tab" class="flex-1 px-3 py-1 rounded-lg bg-yellow-400 dark:bg-yellow-600 hover:brightness-105 transition">Bookmarks</button>
       <button id="show-watched-tab" class="flex-1 px-3 py-1 rounded-lg bg-blue-400 dark:bg-blue-600 hover:brightness-105 transition">Watched</button>
     </div>
-    <ul id="options-list" class="space-y-2 max-h-[70vh] overflow-auto"></ul>
+    <div id="options-list" class="space-y-2 max-h-[70vh] overflow-auto"></div>
     <button id="close-options" class="mt-4 w-full px-3 py-1 rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 transition">Close</button>
   `;
   document.body.appendChild(optionsPanel);
@@ -63,15 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
 
-  // Close panels when clicking outside
+  // Click outside closes menus/panels
   document.addEventListener('click', (e) => {
     const isClickInsideOptions = optionsPanel.contains(e.target) || menuOptionsBtn.contains(e.target);
-    if (!isClickInsideOptions) {
-      optionsPanel.classList.add('-translate-x-full');
-    }
-    if (!menuToggleBtn.contains(e.target)) {
-      menuDropdown.classList.add('hidden');
-    }
+    if (!isClickInsideOptions) optionsPanel.classList.add('-translate-x-full');
+    if (!menuToggleBtn.contains(e.target)) menuDropdown.classList.add('hidden');
   });
 
   // --- Data ---
@@ -121,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const SLOT_MINUTES = 15;       // 15-minute slots
   const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES;
 
+  // Schedule container added to body (hidden), can be moved into main if desired
   const scheduleContainer = document.createElement('div');
   scheduleContainer.id = 'schedule-container';
   scheduleContainer.className = 'hidden p-4';
@@ -184,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
-  // --- Course type helper (online / inperson / hybrid / unknown) ---
+  // --- Course helpers ---
   function getCourseType(course) {
     if (!course || !Array.isArray(course.schedule) || course.schedule.length === 0) return 'unknown';
     const hasOnline = course.schedule.some(s => (s.where || '').toUpperCase().includes('ONLINE'));
@@ -195,6 +197,28 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'unknown';
   }
 
+  function clamp(v, a=0, b=100) { return Math.max(a, Math.min(b, v)); }
+
+  // Robust extraction of the 3-digit course number (100/200/300..)
+  function getCourseNumber(course) {
+    // prefer an explicit field if backend provides it
+    if (course.courseNumber) return String(course.courseNumber).padStart(3, '0');
+    // check courseTitle/name for patterns like "SUBJ 101" or "(101)" or standalone 3-digit
+    const name = (course.courseName || '') + ' ' + (course.title || '');
+    // look for pattern "SUBJ 101" (subject code might appear)
+    const subj = course.subjectCode || '';
+    if (subj) {
+      const reSubj = new RegExp(`${subj}\\s*([0-9]{3})`, 'i');
+      const m1 = name.match(reSubj);
+      if (m1) return m1[1];
+    }
+    // fallback: first standalone 3-digit number
+    const m2 = name.match(/\b([0-9]{3})\b/);
+    if (m2) return m2[1];
+    return '';
+  }
+
+  // --- Display courses (clean, compact card) ---
   function displayCourses(courses) {
     coursesContainer.innerHTML = '';
     if (!courses.length) {
@@ -203,58 +227,127 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     courses.forEach(course => {
-      const courseNumberMatch = course.courseName.match(/\d{3}/);
-      const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+      const courseNumber = getCourseNumber(course);
+      // build schedule lines
       const scheduleInfo = (course.schedule || []).map(s => {
-        const locationEmoji = (s.where || '').toUpperCase().includes('ONLINE') ? '💻 Online' : '🏫 In-person';
-        return `<p class="text-sm text-gray-600 dark:text-gray-400">${s.days || ''} ${s.time || ''} • ${locationEmoji}</p>`;
-      }).join('') || '';
+        const where = (s.where || '').toUpperCase();
+        const locationEmoji = where.includes('ONLINE') ? '💻 Online' : '🏫 In-person';
+        const days = s.days || '';
+        const time = s.time || '';
+        return `<div class="text-sm text-gray-600 dark:text-gray-400">${days} ${time} • ${locationEmoji}</div>`;
+      }).join('');
 
-      const seatsPercent = course.seats ? (course.seats.actual / course.seats.capacity) * 100 : 0;
-      const seatsColor = seatsPercent > 80 ? 'bg-red-500' : seatsPercent > 50 ? 'bg-yellow-400' : 'bg-green-500';
+      // seats progress
+      const capacity = Number(course.seats?.capacity) || 0;
+      const actual = Number(course.seats?.actual) || 0;
+      const remaining = (typeof course.seats?.remaining === 'number') ? course.seats.remaining : (capacity - actual);
+      const seatsPercent = capacity === 0 ? 0 : clamp((actual / capacity) * 100, 0, 200);
 
       const type = getCourseType(course);
-      const typeBadge = type === 'online' ? `<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>`
-                      : type === 'inperson' ? `<span class="px-2 py-1 rounded-full text-xs bg-green-100 dark:bg-green-700 text-green-800 dark:text-white">In-person</span>`
-                      : type === 'hybrid' ? `<span class="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-700 text-amber-800 dark:text-white">Hybrid</span>`
-                      : `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>`;
+      const typeBadge = type === 'online'
+        ? `<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>`
+        : type === 'inperson'
+        ? `<span class="px-2 py-1 rounded-full text-xs bg-green-100 dark:bg-green-700 text-green-800 dark:text-white">In-person</span>`
+        : type === 'hybrid'
+        ? `<span class="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-700 text-amber-800 dark:text-white">Hybrid</span>`
+        : `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>`;
 
       const card = document.createElement('div');
-      card.className = `bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition p-5 flex flex-col justify-between`;
+      card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition p-4 flex flex-col justify-between';
 
+      // compact, readable structure
       card.innerHTML = `
-        <div>
-          <div class="flex items-start justify-between gap-3">
-            <h3 class="text-lg font-semibold ${subjectColorMap[course.subjectCode] || 'text-blue-700'}">
-              ${course.subjectCode} ${courseNumber} – ${course.courseName}
-            </h3>
-            <div>${typeBadge}</div>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 flex items-center justify-center rounded ${subjectColorMap[course.subjectCode] || 'bg-gray-300'} text-white font-bold">${course.subjectCode || ''}</div>
+              <div>
+                <div class="text-lg font-semibold leading-tight">${course.subjectCode} ${courseNumber ? courseNumber : ''} <span class="text-sm font-medium text-gray-500 dark:text-gray-300">• ${course.courseName}</span></div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">👨‍🏫 ${course.instructor || 'TBA'}</div>
+              </div>
+            </div>
           </div>
-          <p class="text-sm text-gray-500 dark:text-gray-400">CRN: ${course.crn}</p>
-          <p class="mt-1 font-medium">👨‍🏫 ${course.instructor || 'TBA'}</p>
-          <div class="mt-2 space-y-1">${scheduleInfo}</div>
-          ${course.seats ? `<div class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 mt-1">
-            <div class="h-2 rounded ${seatsColor}" style="width:${seatsPercent}%;"></div>
-          </div>` : ''}
+          <div class="text-right space-y-1">
+            ${typeBadge}
+            <div class="text-xs text-gray-400 dark:text-gray-300">CRN: <span class="font-semibold">${course.crn}</span></div>
+          </div>
         </div>
+
+        <div class="mt-3 text-sm text-gray-600 dark:text-gray-400">${scheduleInfo || '<span class="text-xs text-gray-500">Schedule: TBA</span>'}</div>
+
+        ${capacity > 0 ? `<div class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 mt-3">
+          <div class="h-2 rounded ${seatsPercent > 80 ? 'bg-red-500' : seatsPercent > 50 ? 'bg-yellow-400' : 'bg-green-500'}" style="width:${seatsPercent}%;"></div>
+        </div>` : ''}
+
         <div class="mt-4 flex flex-wrap gap-2">
-          <button class="details-btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1" data-term="${termSelect.value}" data-crn="${course.crn}">🔍 View Details</button>
-          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex-1 text-center">📝 Sign Up</a>
-          <button class="bookmark-btn ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-300'} hover:bg-yellow-400 text-white px-4 py-2 rounded-lg flex-1" data-crn="${course.crn}">${bookmarks.includes(course.crn) ? '★ Bookmarked' : '☆ Bookmark'}</button>
-          <button class="watch-btn ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'} text-white px-4 py-2 rounded-lg flex-1" data-crn="${course.crn}" data-term="${termSelect.value}">${watchedCourses.includes(course.crn) ? '👁 Watching' : '👁 Watch'}</button>
+          <button class="details-btn shrink px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex-1" data-term="${termSelect.value}" data-crn="${course.crn}">🔍 Details</button>
+          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm">📝 Sign Up</a>
+          <button class="bookmark-btn px-3 py-1 rounded-lg text-white text-sm ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-300'}" data-crn="${course.crn}">${bookmarks.includes(course.crn) ? '★ Bookmarked' : '☆ Bookmark'}</button>
+          <button class="watch-btn px-3 py-1 rounded-lg text-white text-sm ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'}" data-crn="${course.crn}" data-term="${termSelect.value}">${watchedCourses.includes(course.crn) ? '👁 Watching' : '👁 Watch'}</button>
+          <button class="copy-crn-btn px-3 py-1 rounded-lg text-sm border border-gray-300 dark:border-gray-600">Copy CRN</button>
         </div>
       `;
+
       coursesContainer.appendChild(card);
     });
   }
 
-  // --- Event delegation ---
+  // --- Event delegation for buttons in course list ---
   coursesContainer.addEventListener('click', e => {
-    if (e.target.classList.contains('details-btn')) fetchCourseDetails(termSelect.value, e.target.dataset.crn);
-    if (e.target.classList.contains('bookmark-btn')) toggleBookmark(e.target);
-    if (e.target.classList.contains('watch-btn')) toggleWatch(e.target);
+    const target = e.target;
+    if (target.classList.contains('details-btn')) fetchCourseDetails(termSelect.value, target.dataset.crn);
+    if (target.classList.contains('bookmark-btn')) toggleBookmark(target);
+    if (target.classList.contains('watch-btn')) toggleWatch(target);
+    if (target.classList.contains('copy-crn-btn')) handleCopyButton(target);
   });
 
+  function handleCopyButton(button) {
+    // find the CRN in the card (it is in the markup)
+    const card = button.closest('div');
+    const crnMatch = card ? card.innerText.match(/CRN:\s*([0-9]+)/) : null;
+    const crn = crnMatch ? crnMatch[1] : null;
+    if (!crn) {
+      // fallback: attempt dataset on buttons next to it
+      const btnData = card.querySelector('[data-crn]');
+      if (btnData) {
+        try { navigator.clipboard.writeText(btnData.dataset.crn); showCopyFeedback(button); return; } catch {}
+      }
+      alert('CRN not found to copy.');
+      return;
+    }
+    // use clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(crn).then(() => showCopyFeedback(button), () => fallbackCopy(crn, button));
+    } else {
+      fallbackCopy(crn, button);
+    }
+  }
+
+  function showCopyFeedback(button) {
+    const original = button.textContent;
+    button.textContent = 'Copied!';
+    button.disabled = true;
+    setTimeout(() => {
+      button.textContent = original;
+      button.disabled = false;
+    }, 1200);
+  }
+
+  function fallbackCopy(text, button) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showCopyFeedback(button);
+    } catch {
+      alert('Could not copy CRN.');
+    }
+  }
+
+  // --- Bookmark / Watch toggles ---
   function toggleBookmark(button) {
     const crn = button.dataset.crn;
     bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
@@ -268,29 +361,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const crn = button.dataset.crn;
     const term = button.dataset.term;
     const watching = watchedCourses.includes(crn);
-    fetch(`/watch/${term}/${crn}`, { method: watching ? 'DELETE' : 'POST' })
-      .then(() => {
-        watchedCourses = watching ? watchedCourses.filter(c => c !== crn) : [...watchedCourses, crn];
-        localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-        button.textContent = watching ? '👁 Watch' : '👁 Watching';
-        button.classList.toggle('bg-blue-500', !watching);
-        button.classList.toggle('bg-gray-300', watching);
-      });
+    // optimistic UI: update locally immediately and then call endpoint
+    if (!watching) {
+      watchedCourses = [...watchedCourses, crn];
+      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+      button.textContent = '👁 Watching';
+      button.classList.add('bg-blue-500');
+      button.classList.remove('bg-gray-300');
+      fetch(`/watch/${term}/${crn}`, { method: 'POST' }).catch(() => {/* ignore network errors for now */});
+    } else {
+      watchedCourses = watchedCourses.filter(c => c !== crn);
+      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+      button.textContent = '👁 Watch';
+      button.classList.remove('bg-blue-500');
+      button.classList.add('bg-gray-300');
+      fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {/* ignore network errors for now */});
+    }
   }
 
   // --- Modal ---
   function fetchCourseDetails(term, crn) {
+    modalBody.innerHTML = '<div class="text-center py-6">Loading...</div>';
+    modalTitle.textContent = '';
+    modal.classList.remove('hidden');
     fetch(`/course-details/${term}/${crn}`)
       .then(res => res.json())
       .then(displayCourseDetails)
       .catch(() => {
         modalBody.innerHTML = '<p class="text-red-600">Error loading details.</p>';
-        modal.classList.remove('hidden');
       });
   }
 
   function displayCourseDetails(details) {
-    modalTitle.textContent = details.title;
+    modalTitle.textContent = details.title || details.courseName || 'Course Details';
     const seats = details.seats?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
       <p class="font-semibold">Seats</p>
       <p>Total: ${details.seats.capacity}</p>
@@ -308,9 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
     modalBody.innerHTML = `
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <p><span class="font-semibold">Term:</span> ${details.associatedTerm}</p>
-          <p><span class="font-semibold">Levels:</span> ${details.levels}</p>
-          <p><span class="font-semibold">Credits:</span> ${details.credits}</p>
+          <p><span class="font-semibold">Term:</span> ${details.associatedTerm || 'N/A'}</p>
+          <p><span class="font-semibold">Levels:</span> ${details.levels || 'N/A'}</p>
+          <p><span class="font-semibold">Credits:</span> ${details.credits || 'N/A'}</p>
         </div>
         <div class="flex gap-2 flex-col">${seats}${waitlist}</div>
       </div>
@@ -318,7 +421,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg inline-block">📝 Sign Up in OASIS</a>
       </div>
     `;
-    modal.classList.remove('hidden');
   }
 
   const closeModal = () => modal.classList.add('hidden');
@@ -326,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
   modal.querySelector('.close-button').addEventListener('click', closeModal);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-  // --- Bookmarks / Watched tabs (Mini Cards) ---
+  // --- Bookmarks / Watched mini cards in options panel ---
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
     if (list.length === 0) {
@@ -336,27 +438,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     list.forEach(crn => {
       const course = allCourses.find(c => c.crn === crn);
-      if (!course) return;
+      if (!course) {
+        // If course not currently loaded, still show CRN
+        const liMissing = document.createElement('div');
+        liMissing.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
+        liMissing.innerHTML = `
+          <div>
+            <div class="font-semibold">CRN ${crn}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-300">Course not currently in list</div>
+          </div>
+          <div>
+            <button class="remove-btn text-red-500 text-sm font-bold">✖</button>
+          </div>
+        `;
+        liMissing.querySelector('.remove-btn').addEventListener('click', () => {
+          if (type === 'bookmark') {
+            bookmarks = bookmarks.filter(c => c !== crn);
+            localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+          } else {
+            watchedCourses = watchedCourses.filter(c => c !== crn);
+            localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+          }
+          liMissing.remove();
+        });
+        optionsList.appendChild(liMissing);
+        return;
+      }
 
-      const courseNumberMatch = course.courseName.match(/\d{3}/);
-      const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
-      const seatsText = course.seats
-        ? `${course.seats.remaining} / ${course.seats.capacity} seats`
-        : 'Seats info N/A';
-
-      const li = document.createElement('li');
+      const li = document.createElement('div');
       li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex flex-col gap-1';
+      const courseNumber = getCourseNumber(course);
+      const seatsText = course.seats ? `${course.seats.remaining ?? (course.seats.capacity - course.seats.actual)} / ${course.seats.capacity} seats` : 'Seats info N/A';
       li.innerHTML = `
         <div class="flex justify-between items-start">
           <div>
             <p class="font-semibold text-sm">${course.subjectCode} ${courseNumber} – ${course.courseName}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-300">Instructor: ${course.instructor}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">Instructor: ${course.instructor || 'TBA'}</p>
             <p class="text-xs text-gray-600 dark:text-gray-300">${seatsText}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Click ✖ to remove from ${type}</p>
           </div>
           <button class="remove-btn text-red-500 text-sm font-bold ml-2">✖</button>
         </div>
-        <button class="details-mini-btn mt-1 text-blue-600 dark:text-blue-400 text-xs font-medium underline">View Details</button>
+        <div class="mt-2">
+          <button class="details-mini-btn text-blue-600 dark:text-blue-400 text-xs font-medium underline">View Details</button>
+        </div>
       `;
 
       li.querySelector('.details-mini-btn').addEventListener('click', () => {
@@ -410,16 +535,31 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    if (levelFilter?.value) filtered = filtered.filter(c => {
-      const match = (c.courseName || '').match(/\d{3}/);
-      return match && match[0].startsWith(levelFilter.value);
-    });
+    // --- Fixed level filter: robust extraction of course number ---
+    if (levelFilter?.value) {
+      filtered = filtered.filter(c => {
+        const num = getCourseNumber(c);
+        if (!num) return false;
+        return num.charAt(0) === String(levelFilter.value);
+      });
+    }
 
-    if (availabilityFilter?.value) filtered = filtered.filter(c => {
-      if (!c.seats) return false;
-      const percent = (c.seats.actual / c.seats.capacity) * 100;
-      return availabilityFilter.value === 'open' ? percent < 100 : percent >= 100;
-    });
+    // --- Fixed availability filter: check seats safely ---
+    if (availabilityFilter?.value) {
+      filtered = filtered.filter(c => {
+        if (!c.seats) return false;
+        const capacity = Number(c.seats.capacity) || 0;
+        const actual = Number(c.seats.actual) || 0;
+        const remaining = (typeof c.seats.remaining === 'number') ? c.seats.remaining : (capacity - actual);
+        if (capacity === 0) {
+          // treat as unknown => exclude (so user sees only courses with real seat data)
+          return false;
+        }
+        if (availabilityFilter.value === 'open') return remaining > 0;
+        if (availabilityFilter.value === 'full') return remaining <= 0;
+        return true;
+      });
+    }
 
     if (sortSelect?.value) {
       if (sortSelect.value === 'name') filtered.sort((a, b) => (a.courseName || '').localeCompare(b.courseName || ''));
@@ -429,12 +569,11 @@ document.addEventListener('DOMContentLoaded', () => {
     displayCourses(filtered);
   }
 
-  // --- Schedule helpers ---
+  // --- Schedule helpers (unchanged logic mostly) ---
   function parseDaysString(daysStr) {
     if (!daysStr) return [];
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
     const days = new Set();
-
     if (s.includes('M')) days.add(0);
     if (s.includes('W')) days.add(2);
     if (s.includes('F')) days.add(4);
@@ -613,8 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
           block.style.height = `${Math.max(10, heightPx)}px`;
           block.style.zIndex = 20;
 
-          const courseNumberMatch = course.courseName.match(/\d{3}/);
-          const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+          const courseNumber = getCourseNumber(course);
 
           block.innerHTML = `
             <div class="text-[10px] font-semibold leading-tight whitespace-nowrap">${course.subjectCode} ${courseNumber}</div>
@@ -667,12 +805,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function addCourseToTBA(course, tbaListEl) {
     const li = document.createElement('div');
     li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
-    const courseNumberMatch = course.courseName.match(/\d{3}/);
-    const courseNumber = courseNumberMatch ? courseNumberMatch[0] : '';
+    const courseNumber = getCourseNumber(course);
     li.innerHTML = `
       <div>
         <div class="font-semibold">${course.subjectCode} ${courseNumber} • ${course.courseName}</div>
-        <div class="text-xs text-gray-600 dark:text-gray-300">${course.instructor} • CRN: ${course.crn}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-300">${course.instructor || 'TBA'} • CRN: ${course.crn}</div>
       </div>
       <div>
         <button class="small-details px-2 py-1 rounded bg-blue-600 text-white text-sm">Details</button>
@@ -713,4 +850,5 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleSchedule(!isScheduleVisible);
     menuDropdown.classList.add('hidden');
   });
+
 });
