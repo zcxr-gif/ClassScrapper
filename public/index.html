@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Farmingdale Class Finder</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -18,7 +18,7 @@
         <p class="text-lg opacity-90">Class Finder 🎓</p>
       </div>
       <div class="flex gap-2 md:gap-4 items-center">
-        
+
         <div class="relative" id="menu-container">
           <button id="menu-toggle-btn" class="px-3 py-2 rounded-lg bg-white text-gray-800 dark:bg-gray-700 dark:text-gray-100 shadow hover:shadow-md transition flex items-center gap-2">
             ☰ Menu
@@ -56,11 +56,12 @@
     <div id="filter-controls" class="flex flex-col md:flex-row gap-2 mb-6 items-center">
       <input type="text" id="course-search" placeholder="Search by course name, instructor, or CRN 🔍" 
              class="flex-1 p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm focus:outline-none">
-      
+
       <select id="filter-type" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
         <option value="">All Types</option>
         <option value="online">Online 💻</option>
         <option value="inperson">In-person 🏫</option>
+        <option value="hybrid">Hybrid 🔀</option>
       </select>
 
       <select id="filter-level" class="p-2 rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-sm">
@@ -89,7 +90,7 @@
     </div>
 
     <div id="courses-container" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      </div>
+    </div>
   </main>
 
   <div id="details-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
