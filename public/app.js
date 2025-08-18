@@ -1,7 +1,6 @@
 // app.js (UPDATED)
-// - Fixes: level & availability filters
-// - UI: cleaner course cards, CRN copy button
-// - Keeps: options panel, schedule view, bookmarks/watch, modal, dark mode
+// - Adds percentage label overlay to seats progress bar in course cards
+// - Keeps previous fixes for filters, schedule, bookmarks, copy CRN, etc.
 
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
@@ -202,7 +201,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Robust extraction of the 3-digit course number (100/200/300..)
   function getCourseNumber(course) {
     // prefer an explicit field if backend provides it
-    if (course.courseNumber) return String(course.courseNumber).padStart(3, '0');
+    if (course.courseNumber) {
+      const digits = String(course.courseNumber).match(/\d{3}/);
+      if (digits) return digits[0].padStart(3, '0');
+    }
     // check courseTitle/name for patterns like "SUBJ 101" or "(101)" or standalone 3-digit
     const name = (course.courseName || '') + ' ' + (course.title || '');
     // look for pattern "SUBJ 101" (subject code might appear)
@@ -228,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     courses.forEach(course => {
       const courseNumber = getCourseNumber(course);
-      
+
       // Schedule Info
       const scheduleInfo = (course.schedule || []).map(s => {
         const where = (s.where || '').toUpperCase();
@@ -245,7 +247,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const capacity = Number(course.seats?.capacity) || 0;
       const actual = Number(course.seats?.actual) || 0;
       const remaining = (typeof course.seats?.remaining === 'number') ? course.seats.remaining : (capacity - actual);
-      const seatsPercent = capacity === 0 ? 0 : clamp((actual / capacity) * 100, 0, 100);
+      // round percentage for display
+      const seatsPercent = capacity === 0 ? 0 : clamp(Math.round((actual / capacity) * 100), 0, 100);
       const seatsColor = seatsPercent > 85 ? 'bg-red-500' : seatsPercent > 60 ? 'bg-yellow-400' : 'bg-green-500';
 
       const type = getCourseType(course);
@@ -284,11 +287,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ${capacity > 0 ? `
         <div class="px-4 pb-4">
             <div class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                <span>Seats: ${actual}/${capacity}</span>
+                <span>${actual} / ${capacity} taken</span>
                 <span>${remaining} available</span>
             </div>
-            <div class="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-700">
-              <div class="h-2.5 rounded-full ${seatsColor}" style="width:${seatsPercent}%;"></div>
+            <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${seatsPercent}" title="${seatsPercent}% full">
+              <div class="h-3 rounded-full ${seatsColor}" style="width:${seatsPercent}%;"></div>
+              <div class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-gray-800 dark:text-gray-100 pointer-events-none">
+                ${seatsPercent}% full
+              </div>
             </div>
         </div>` : ''}
 
@@ -552,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // --- Fixed level filter: robust extraction of course number ---
+    // --- Level filter ---
     if (levelFilter?.value) {
       filtered = filtered.filter(c => {
         const num = getCourseNumber(c);
@@ -561,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // --- Fixed availability filter: check seats safely ---
+    // --- Availability filter: check seats safely ---
     if (availabilityFilter?.value) {
       filtered = filtered.filter(c => {
         if (!c.seats) return false;
