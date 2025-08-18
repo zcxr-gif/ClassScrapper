@@ -219,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Display courses (clean, compact card) ---
+  // --- Display courses (clean, compact card) ---
   function displayCourses(courses) {
     coursesContainer.innerHTML = '';
     if (!courses.length) {
@@ -228,63 +229,78 @@ document.addEventListener('DOMContentLoaded', () => {
 
     courses.forEach(course => {
       const courseNumber = getCourseNumber(course);
-      // build schedule lines
+      
+      // Schedule Info
       const scheduleInfo = (course.schedule || []).map(s => {
         const where = (s.where || '').toUpperCase();
         const locationEmoji = where.includes('ONLINE') ? '💻 Online' : '🏫 In-person';
-        const days = s.days || '';
-        const time = s.time || '';
-        return `<div class="text-sm text-gray-600 dark:text-gray-400">${days} ${time} • ${locationEmoji}</div>`;
+        const days = s.days || 'TBA';
+        const time = s.time || 'TBA';
+        return `<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <span>🗓️ ${days} ${time}</span>
+                  <span>${locationEmoji}</span>
+                </div>`;
       }).join('');
 
-      // seats progress
+      // Seats Progress Bar
       const capacity = Number(course.seats?.capacity) || 0;
       const actual = Number(course.seats?.actual) || 0;
       const remaining = (typeof course.seats?.remaining === 'number') ? course.seats.remaining : (capacity - actual);
-      const seatsPercent = capacity === 0 ? 0 : clamp((actual / capacity) * 100, 0, 200);
+      const seatsPercent = capacity === 0 ? 0 : clamp((actual / capacity) * 100, 0, 100);
+      const seatsColor = seatsPercent > 85 ? 'bg-red-500' : seatsPercent > 60 ? 'bg-yellow-400' : 'bg-green-500';
 
       const type = getCourseType(course);
-      const typeBadge = type === 'online'
-        ? `<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>`
-        : type === 'inperson'
-        ? `<span class="px-2 py-1 rounded-full text-xs bg-green-100 dark:bg-green-700 text-green-800 dark:text-white">In-person</span>`
-        : type === 'hybrid'
-        ? `<span class="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-700 text-amber-800 dark:text-white">Hybrid</span>`
-        : `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>`;
+      const typeBadge = {
+        online: '<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>',
+        inperson: '<span class="px-2 py-1 rounded-full text-xs bg-green-100 dark:bg-green-700 text-green-800 dark:text-white">In-person</span>',
+        hybrid: '<span class="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-700 text-amber-800 dark:text-white">Hybrid</span>',
+        unknown: '<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>'
+      }[type];
 
       const card = document.createElement('div');
-      card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition p-4 flex flex-col justify-between';
+      card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
 
-      // compact, readable structure
       card.innerHTML = `
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 flex items-center justify-center rounded ${subjectColorMap[course.subjectCode] || 'bg-gray-300'} text-white font-bold">${course.subjectCode || ''}</div>
-              <div>
-                <div class="text-lg font-semibold leading-tight">${course.subjectCode} ${courseNumber ? courseNumber : ''} <span class="text-sm font-medium text-gray-500 dark:text-gray-300">• ${course.courseName}</span></div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">👨‍🏫 ${course.instructor || 'TBA'}</div>
-              </div>
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex justify-between items-start gap-2">
+            <div>
+              <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">${course.subjectCode} ${courseNumber}</h3>
+              <p class="text-sm text-gray-600 dark:text-gray-300">${course.courseName}</p>
             </div>
-          </div>
-          <div class="text-right space-y-1">
-            ${typeBadge}
-            <div class="text-xs text-gray-400 dark:text-gray-300">CRN: <span class="font-semibold">${course.crn}</span></div>
+            <div class="text-right">
+                ${typeBadge}
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">CRN: ${course.crn}</p>
+            </div>
           </div>
         </div>
 
-        <div class="mt-3 text-sm text-gray-600 dark:text-gray-400">${scheduleInfo || '<span class="text-xs text-gray-500">Schedule: TBA</span>'}</div>
-
-        ${capacity > 0 ? `<div class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 mt-3">
-          <div class="h-2 rounded ${seatsPercent > 80 ? 'bg-red-500' : seatsPercent > 50 ? 'bg-yellow-400' : 'bg-green-500'}" style="width:${seatsPercent}%;"></div>
+        <div class="p-4 space-y-3 flex-grow">
+          <div class="flex items-center gap-2 text-sm">
+            <span>👨‍🏫</span>
+            <span class="font-medium">${course.instructor || 'TBA'}</span>
+          </div>
+          ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
+        </div>
+        
+        ${capacity > 0 ? `
+        <div class="px-4 pb-4">
+            <div class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                <span>Seats: ${actual}/${capacity}</span>
+                <span>${remaining} available</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-700">
+              <div class="h-2.5 rounded-full ${seatsColor}" style="width:${seatsPercent}%;"></div>
+            </div>
         </div>` : ''}
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button class="details-btn shrink px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm flex-1" data-term="${termSelect.value}" data-crn="${course.crn}">🔍 Details</button>
-          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm">📝 Sign Up</a>
-          <button class="bookmark-btn px-3 py-1 rounded-lg text-white text-sm ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-300'}" data-crn="${course.crn}">${bookmarks.includes(course.crn) ? '★ Bookmarked' : '☆ Bookmark'}</button>
-          <button class="watch-btn px-3 py-1 rounded-lg text-white text-sm ${watchedCourses.includes(course.crn) ? 'bg-blue-500' : 'bg-gray-300'}" data-crn="${course.crn}" data-term="${termSelect.value}">${watchedCourses.includes(course.crn) ? '👁 Watching' : '👁 Watch'}</button>
-          <button class="copy-crn-btn px-3 py-1 rounded-lg text-sm border border-gray-300 dark:border-gray-600">Copy CRN</button>
+        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex flex-wrap gap-2 justify-between">
+          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect.value}" data-crn="${course.crn}">Details</button>
+          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="flex-1 text-center px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
+          <div class="flex flex-1 gap-2">
+            <button class="bookmark-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${course.crn}" title="Bookmark">${bookmarks.includes(course.crn) ? '★' : '☆'}</button>
+            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(course.crn) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${course.crn}" data-term="${termSelect.value}" title="Watch">👁</button>
+            <button class="copy-crn-btn w-full px-2 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN">📋</button>
+          </div>
         </div>
       `;
 
