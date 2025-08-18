@@ -219,7 +219,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Display courses (clean, compact card) ---
-  // --- Display courses (clean, compact card) ---
   function displayCourses(courses) {
     coursesContainer.innerHTML = '';
     if (!courses.length) {
@@ -505,7 +504,9 @@ document.addEventListener('DOMContentLoaded', () => {
         optionsPanel.classList.add('-translate-x-full');
       });
 
-      li.querySelector('.remove-btn').addEventListener('click', () => {
+      li.querySelector('.remove-btn').addEventListener('click', (e) => {
+        e.stopPropagation(); 
+        
         if (type === 'bookmark') {
           bookmarks = bookmarks.filter(c => c !== crn);
           localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -593,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (s.includes('M')) days.add(0);
     if (s.includes('W')) days.add(2);
     if (s.includes('F')) days.add(4);
-    if (s.includes('R')) days.add(3);
+    if (s.includes('TR')) days.add(3);
     if (s.includes('TH')) days.add(3);
     else if (s.includes('TR')) days.add(3);
     else if (s.includes('T')) days.add(1);

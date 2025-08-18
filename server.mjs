@@ -175,6 +175,7 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
         courseName,
         subjectCode,
         section,
+        courseNumber: section,
         instructor: primaryInstructor,
         schedule 
       });
