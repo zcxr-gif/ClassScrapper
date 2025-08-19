@@ -1,7 +1,4 @@
-// app.js (UPDATED)
-// - Adds percentage label overlay to seats progress bar in course cards
-// - Keeps previous fixes for filters, schedule, bookmarks, copy CRN, etc.
-
+// app.js (fixed) - fetches per-course details to populate seats/progress bar
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -185,6 +182,16 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
+  // --- Utility: parse seat numbers robustly ---
+  function parseSeatValue(v) {
+    if (v === null || v === undefined) return NaN;
+    const s = String(v).trim();
+    // remove commas and non-digit except negative sign (shouldn't be negative)
+    const cleaned = s.replace(/[^\d-]/g, '');
+    const n = parseInt(cleaned, 10);
+    return isNaN(n) ? NaN : n;
+  }
+
   // --- Course helpers ---
   function getCourseType(course) {
     if (!course || !Array.isArray(course.schedule) || course.schedule.length === 0) return 'unknown';
@@ -220,6 +227,44 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   }
 
+  // --- Update seat UI after details fetched ---
+  function updateSeatUI(crn, capacity, actual, remaining) {
+    const bar = document.getElementById(`seat-bar-${crn}`);
+    const label = document.getElementById(`seat-label-${crn}`);
+    const wrapper = document.getElementById(`seat-wrapper-${crn}`);
+
+    capacity = Number(capacity);
+    actual = Number(actual);
+    remaining = (typeof remaining === 'number') ? remaining : (capacity - actual);
+
+    const seatsPercent = isNaN(capacity) || capacity === 0 ? 0 : clamp(Math.round((actual / capacity) * 100), 0, 100);
+    const seatsColor = seatsPercent > 85 ? 'bg-red-500' : seatsPercent > 60 ? 'bg-yellow-400' : 'bg-green-500';
+
+    if (bar) {
+      bar.style.width = `${seatsPercent}%`;
+      // replace color classes (simple approach)
+      bar.className = `h-3 rounded-full ${seatsColor}`;
+      bar.setAttribute('aria-valuenow', seatsPercent);
+    }
+    if (label) {
+      // show both percentage and raw numbers
+      if (isNaN(capacity) || capacity === 0) {
+        label.textContent = 'Seats: N/A';
+      } else {
+        label.textContent = `${seatsPercent}% full • ${actual} / ${capacity} taken • ${remaining} available`;
+      }
+    }
+    if (wrapper) {
+      wrapper.title = isNaN(capacity) || capacity === 0 ? 'Seats info unavailable' : `${actual} taken of ${capacity} — ${seatsPercent}% full`;
+    }
+
+    // update allCourses entry if present
+    const idx = allCourses.findIndex(c => String(c.crn) === String(crn));
+    if (idx >= 0) {
+      allCourses[idx].seats = { capacity, actual, remaining };
+    }
+  }
+
   // --- Display courses (clean, compact card) ---
   function displayCourses(courses) {
     coursesContainer.innerHTML = '';
@@ -230,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     courses.forEach(course => {
       const courseNumber = getCourseNumber(course);
+      const crn = course.crn;
 
       // Schedule Info
       const scheduleInfo = (course.schedule || []).map(s => {
@@ -243,14 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
       }).join('');
 
-      // Seats Progress Bar
-      const capacity = Number(course.seats?.capacity) || 0;
-      const actual = Number(course.seats?.actual) || 0;
-      const remaining = (typeof course.seats?.remaining === 'number') ? course.seats.remaining : (capacity - actual);
-      // round percentage for display
-      const seatsPercent = capacity === 0 ? 0 : clamp(Math.round((actual / capacity) * 100), 0, 100);
-      const seatsColor = seatsPercent > 85 ? 'bg-red-500' : seatsPercent > 60 ? 'bg-yellow-400' : 'bg-green-500';
-
       const type = getCourseType(course);
       const typeBadge = {
         online: '<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>',
@@ -262,6 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
 
+      // ALWAYS include seat wrapper (start as loading). We'll fill it after fetching course-details.
       card.innerHTML = `
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex justify-between items-start gap-2">
@@ -271,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="text-right">
                 ${typeBadge}
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">CRN: ${course.crn}</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">CRN: ${crn}</p>
             </div>
           </div>
         </div>
@@ -283,33 +322,83 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
         </div>
-        
-        ${capacity > 0 ? `
-        <div class="px-4 pb-4">
-            <div class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                <span>${actual} / ${capacity} taken</span>
-                <span>${remaining} available</span>
+
+        <div id="seat-wrapper-${crn}" class="px-4 pb-4">
+            <div id="seat-label-${crn}" class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+              <span>Loading seats...</span>
             </div>
-            <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${seatsPercent}" title="${seatsPercent}% full">
-              <div class="h-3 rounded-full ${seatsColor}" style="width:${seatsPercent}%;"></div>
-              <div class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-gray-800 dark:text-gray-100 pointer-events-none">
-                ${seatsPercent}% full
+            <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="seat-bar-${crn}" class="h-3 rounded-full bg-gray-400" style="width:0%"></div>
+              <div id="seat-overlay-${crn}" class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-gray-800 dark:text-gray-100 pointer-events-none">
+                <!-- overlay label (updated after fetch) -->
               </div>
             </div>
-        </div>` : ''}
+        </div>
 
         <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex flex-wrap gap-2 justify-between">
-          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect.value}" data-crn="${course.crn}">Details</button>
+          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect.value}" data-crn="${crn}">Details</button>
           <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="flex-1 text-center px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
           <div class="flex flex-1 gap-2">
-            <button class="bookmark-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(course.crn) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${course.crn}" title="Bookmark">${bookmarks.includes(course.crn) ? '★' : '☆'}</button>
-            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(course.crn) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${course.crn}" data-term="${termSelect.value}" title="Watch">👁</button>
+            <button class="bookmark-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(String(crn)) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${bookmarks.includes(String(crn)) ? '★' : '☆'}</button>
+            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect.value}" title="Watch">👁</button>
             <button class="copy-crn-btn w-full px-2 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN">📋</button>
           </div>
         </div>
       `;
 
       coursesContainer.appendChild(card);
+
+      // If course already includes seats (cache or backend returned seats), use them immediately.
+      if (course.seats && (course.seats.capacity || course.seats.actual || course.seats.remaining)) {
+        const capacity = parseSeatValue(course.seats.capacity);
+        const actual = parseSeatValue(course.seats.actual);
+        const remaining = typeof course.seats.remaining === 'number' ? course.seats.remaining : parseSeatValue(course.seats.remaining);
+        updateSeatUI(crn, capacity, actual, remaining);
+        // fill overlay text element too
+        const overlay = document.getElementById(`seat-overlay-${crn}`);
+        if (overlay) overlay.textContent = `${isNaN(capacity) || capacity === 0 ? '' : Math.round((actual/capacity)*100)}% full`;
+      } else {
+        // fetch details to get seats
+        // small optimization: don't fetch if term isn't selected yet
+        const selectedTerm = termSelect.value;
+        if (selectedTerm) {
+          fetch(`/course-details/${selectedTerm}/${crn}`)
+            .then(r => {
+              if (!r.ok) throw new Error('No details');
+              return r.json();
+            })
+            .then(details => {
+              if (!details || !details.seats) {
+                // show N/A
+                const label = document.getElementById(`seat-label-${crn}`);
+                const overlay = document.getElementById(`seat-overlay-${crn}`);
+                if (label) label.textContent = 'Seats: N/A';
+                if (overlay) overlay.textContent = '';
+                return;
+              }
+              const capacity = parseSeatValue(details.seats.capacity);
+              const actual = parseSeatValue(details.seats.actual);
+              let remaining = parseSeatValue(details.seats.remaining);
+              if (isNaN(remaining)) remaining = (isNaN(capacity) || isNaN(actual)) ? 0 : (capacity - actual);
+
+              updateSeatUI(crn, capacity, actual, remaining);
+              const overlay = document.getElementById(`seat-overlay-${crn}`);
+              if (overlay) overlay.textContent = (isNaN(capacity) || capacity === 0) ? '' : `${Math.round((actual/capacity)*100)}% full`;
+            })
+            .catch(() => {
+              const label = document.getElementById(`seat-label-${crn}`);
+              const overlay = document.getElementById(`seat-overlay-${crn}`);
+              if (label) label.textContent = 'Seats: N/A';
+              if (overlay) overlay.textContent = '';
+            });
+        } else {
+          // term not selected (shouldn't happen for list), show N/A
+          const label = document.getElementById(`seat-label-${crn}`);
+          const overlay = document.getElementById(`seat-overlay-${crn}`);
+          if (label) label.textContent = 'Seats: N/A';
+          if (overlay) overlay.textContent = '';
+        }
+      }
     });
   }
 
@@ -370,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Bookmark / Watch toggles ---
   function toggleBookmark(button) {
-    const crn = button.dataset.crn;
+    const crn = String(button.dataset.crn);
     bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
     button.textContent = bookmarks.includes(crn) ? '★ Bookmarked' : '☆ Bookmark';
@@ -379,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function toggleWatch(button) {
-    const crn = button.dataset.crn;
+    const crn = String(button.dataset.crn);
     const term = button.dataset.term;
     const watching = watchedCourses.includes(crn);
     // optimistic UI: update locally immediately and then call endpoint
@@ -446,7 +535,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const closeModal = () => modal.classList.add('hidden');
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-  modal.querySelector('.close-button').addEventListener('click', closeModal);
+  // guard for missing close-button if DOM was modified
+  const closeBtn = modal.querySelector('.close-button');
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
   // --- Bookmarks / Watched mini cards in options panel ---
@@ -458,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     list.forEach(crn => {
-      const course = allCourses.find(c => c.crn === crn);
+      const course = allCourses.find(c => String(c.crn) === String(crn));
       if (!course) {
         // If course not currently loaded, still show CRN
         const liMissing = document.createElement('div');
@@ -575,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const actual = Number(c.seats.actual) || 0;
         const remaining = (typeof c.seats.remaining === 'number') ? c.seats.remaining : (capacity - actual);
         if (capacity === 0) {
-          // treat as unknown => exclude (so user sees only courses with real seat data)
+          // treat as unknown => exclude
           return false;
         }
         if (availabilityFilter.value === 'open') return remaining > 0;
