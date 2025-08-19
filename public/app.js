@@ -1,4 +1,4 @@
-// app.js (fixed + RateMyProfessors links)
+// app.js (fixed + RateMyProfessors links + UI fixes)
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -282,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bar = document.getElementById(`seat-bar-${crn}`);
     const label = document.getElementById(`seat-label-${crn}`);
     const wrapper = document.getElementById(`seat-wrapper-${crn}`);
+    const overlay = document.getElementById(`seat-overlay-${crn}`);
 
     capacity = Number(capacity);
     actual = Number(actual);
@@ -299,8 +300,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isNaN(capacity) || capacity === 0) {
         label.textContent = 'Seats: N/A';
       } else {
-        label.textContent = `${seatsPercent}% full • ${actual} / ${capacity} taken • ${remaining} available`;
+        label.textContent = `${actual} / ${capacity} taken`;
       }
+    }
+    if (overlay) {
+      overlay.textContent = isNaN(capacity) || capacity === 0 ? '' : `${seatsPercent}% full`;
     }
     if (wrapper) {
       wrapper.title = isNaN(capacity) || capacity === 0 ? 'Seats info unavailable' : `${actual} taken of ${capacity} — ${seatsPercent}% full`;
@@ -310,6 +314,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idx >= 0) {
       allCourses[idx].seats = { capacity, actual, remaining };
     }
+  }
+
+  // --- Small helper to safely extract instructor name(s) from several possible response shapes ---
+  function extractInstructorFrom(details) {
+    if (!details) return '';
+    if (details.instructor && String(details.instructor).trim()) return String(details.instructor).trim();
+    // common alternate shapes:
+    if (details.instructors) {
+      if (Array.isArray(details.instructors)) {
+        const names = details.instructors.map(i => (typeof i === 'string' ? i : (i.name || i.fullName || i.instructor))).filter(Boolean);
+        if (names.length) return names.join(', ');
+      } else if (typeof details.instructors === 'string' && details.instructors.trim()) {
+        return details.instructors.trim();
+      } else if (typeof details.instructors === 'object') {
+        return details.instructors.name || details.instructors.fullName || '';
+      }
+    }
+    // other possible fields
+    if (details.teacher && String(details.teacher).trim()) return String(details.teacher).trim();
+    if (details.faculty && String(details.faculty).trim()) return String(details.faculty).trim();
+    return '';
   }
 
   // --- Display courses (clean, compact card) ---
@@ -345,10 +370,12 @@ document.addEventListener('DOMContentLoaded', () => {
         unknown: '<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>'
       }[type];
 
-      const instructorDisplay = course.instructor || 'TBA';
-      const hasInstructor = instructorDisplay && instructorDisplay !== 'TBA';
+      // instructor display (may be TBA)
+      const instructorDisplay = course.instructor || extractInstructorFrom(course) || 'TBA';
+      const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
 
-      const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 text-xs underline text-red-600 dark:text-red-400">Rate</a>` : '';
+      // small RMP icon link
+      const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 inline-flex items-center justify-center w-6 h-6 rounded text-red-600 dark:text-red-400">⭐</a>` : '';
 
       const card = document.createElement('div');
       card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
@@ -370,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="p-4 space-y-3 flex-grow">
           <div class="flex items-center gap-2 text-sm">
             <span>👨‍🏫</span>
-            <span class="font-medium">${instructorDisplay}</span>
+            <span class="font-medium truncate" style="max-width:260px">${instructorDisplay}</span>
             ${rmpSmallLinkHTML}
           </div>
           ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
@@ -379,6 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div id="seat-wrapper-${crn}" class="px-4 pb-4">
             <div id="seat-label-${crn}" class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
               <span>Loading seats...</span>
+              <span id="seat-label-right-${crn}" class="text-xs"></span>
             </div>
             <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
               <div id="seat-bar-${crn}" class="h-3 rounded-full bg-gray-400" style="width:0%"></div>
@@ -387,13 +415,20 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         </div>
 
-        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex flex-wrap gap-2 justify-between">
-          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect ? termSelect.value : ''}" data-crn="${crn}">Details</button>
-          <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="flex-1 text-center px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
-          <div class="flex flex-1 gap-2">
-            <button class="bookmark-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(String(crn)) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${bookmarks.includes(String(crn)) ? '★' : '☆'}</button>
-            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="Watch">👁</button>
-            <button class="copy-crn-btn w-full px-2 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN">📋</button>
+        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex gap-2 justify-between items-center">
+          <div class="flex-1 mr-2">
+            <button class="details-btn w-full px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect ? termSelect.value : ''}" data-crn="${crn}">Details</button>
+          </div>
+          <div class="flex gap-2 items-center">
+            <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
+
+            <div class="flex items-center gap-1">
+              <button class="bookmark-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(String(crn)) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${bookmarks.includes(String(crn)) ? '★' : '☆'}</button>
+
+              <button class="watch-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="${watchedCourses.includes(String(crn)) ? 'Watching' : 'Watch'}">👁</button>
+
+              <button class="copy-crn-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN" data-crn="${crn}">📋</button>
+            </div>
           </div>
         </div>
       `;
@@ -406,8 +441,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const actual = parseSeatValue(course.seats.actual);
         const remaining = typeof course.seats.remaining === 'number' ? course.seats.remaining : parseSeatValue(course.seats.remaining);
         updateSeatUI(crn, capacity, actual, remaining);
-        const overlay = document.getElementById(`seat-overlay-${crn}`);
-        if (overlay) overlay.textContent = `${isNaN(capacity) || capacity === 0 ? '' : Math.round((actual/capacity)*100)}% full`;
       } else {
         const selectedTerm = termSelect ? termSelect.value : '';
         if (selectedTerm) {
@@ -430,8 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
               if (isNaN(remaining)) remaining = (isNaN(capacity) || isNaN(actual)) ? 0 : (capacity - actual);
 
               updateSeatUI(crn, capacity, actual, remaining);
-              const overlay = document.getElementById(`seat-overlay-${crn}`);
-              if (overlay) overlay.textContent = (isNaN(capacity) || capacity === 0) ? '' : `${Math.round((actual/capacity)*100)}% full`;
             })
             .catch(() => {
               const label = document.getElementById(`seat-label-${crn}`);
@@ -460,15 +491,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // --- Bookmark / Watch functions ---
+  function toggleBookmark(button) {
+    const crn = String(button.dataset.crn);
+    bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
+    localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+    // Update visual state without changing dimensions
+    if (bookmarks.includes(crn)) {
+      button.innerText = '★';
+      button.classList.add('bg-yellow-500');
+      button.classList.remove('bg-gray-400');
+    } else {
+      button.innerText = '☆';
+      button.classList.remove('bg-yellow-500');
+      button.classList.add('bg-gray-400');
+    }
+  }
+
+  function toggleWatch(button) {
+    const crn = String(button.dataset.crn);
+    const term = button.dataset.term;
+    const watching = watchedCourses.includes(crn);
+    if (!watching) {
+      watchedCourses = [...watchedCourses, crn];
+      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+      // Keep button content as icon but change color and aria
+      button.classList.add('bg-sky-500');
+      button.classList.remove('bg-gray-400');
+      button.setAttribute('title', 'Watching');
+      button.setAttribute('aria-pressed', 'true');
+      fetch(`/watch/${term}/${crn}`, { method: 'POST' }).catch(() => {/* ignore network errors for now */});
+    } else {
+      watchedCourses = watchedCourses.filter(c => c !== crn);
+      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
+      button.classList.remove('bg-sky-500');
+      button.classList.add('bg-gray-400');
+      button.setAttribute('title', 'Watch');
+      button.setAttribute('aria-pressed', 'false');
+      fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {/* ignore network errors for now */});
+    }
+  }
+
+  // --- Copy CRN (no layout shift) ---
   function handleCopyButton(button) {
-    const card = button.closest('div');
-    const crnMatch = card ? card.innerText.match(/CRN:\s*([0-9]+)/) : null;
-    const crn = crnMatch ? crnMatch[1] : null;
+    const crn = button.dataset.crn || (button.closest('div') ? (button.closest('div').querySelector('[data-crn]') ? button.closest('div').querySelector('[data-crn]').dataset.crn : null) : null);
     if (!crn) {
-      const btnData = card.querySelector('[data-crn]');
-      if (btnData) {
-        try { navigator.clipboard.writeText(btnData.dataset.crn); showCopyFeedback(button); return; } catch {}
-      }
       alert('CRN not found to copy.');
       return;
     }
@@ -480,13 +547,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function showCopyFeedback(button) {
-    const original = button.textContent;
-    button.textContent = 'Copied!';
+    // Visual feedback without changing button width: add ring and temporarily change background
+    const origBg = button.className;
+    button.classList.add('ring-2', 'ring-green-400');
+    button.setAttribute('aria-label', 'Copied');
     button.disabled = true;
     setTimeout(() => {
-      button.textContent = original;
+      button.classList.remove('ring-2', 'ring-green-400');
       button.disabled = false;
-    }, 1200);
+      button.setAttribute('aria-label', 'Copy CRN');
+    }, 1000);
   }
 
   function fallbackCopy(text, button) {
@@ -500,43 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
       showCopyFeedback(button);
     } catch {
       alert('Could not copy CRN.');
-    }
-  }
-
-  // --- Bookmark / Watch functions ---
-  function toggleBookmark(button) {
-    const crn = String(button.dataset.crn);
-    bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
-    localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    if (bookmarks.includes(crn)) {
-      button.textContent = '★';
-      button.classList.add('bg-yellow-500');
-      button.classList.remove('bg-gray-400');
-    } else {
-      button.textContent = '☆';
-      button.classList.remove('bg-yellow-500');
-      button.classList.add('bg-gray-400');
-    }
-  }
-
-  function toggleWatch(button) {
-    const crn = String(button.dataset.crn);
-    const term = button.dataset.term;
-    const watching = watchedCourses.includes(crn);
-    if (!watching) {
-      watchedCourses = [...watchedCourses, crn];
-      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      button.textContent = '👁 Watching';
-      button.classList.add('bg-blue-500');
-      button.classList.remove('bg-gray-300');
-      fetch(`/watch/${term}/${crn}`, { method: 'POST' }).catch(() => {/* ignore network errors for now */});
-    } else {
-      watchedCourses = watchedCourses.filter(c => c !== crn);
-      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      button.textContent = '👁';
-      button.classList.remove('bg-blue-500');
-      button.classList.add('bg-gray-300');
-      fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {/* ignore network errors for now */});
     }
   }
 
@@ -556,6 +589,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function displayCourseDetails(details) {
     modalTitle.textContent = details.title || details.courseName || 'Course Details';
+
+    const instructorDisplay = extractInstructorFrom(details) || 'TBA';
+    const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
+    const rmpLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg inline-block ml-2">⭐ Rate Instructor</a>` : '';
+
     const seats = details.seats?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
       <p class="font-semibold">Seats</p>
       <p>Total: ${details.seats.capacity}</p>
@@ -569,10 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <p>Taken: ${details.waitlist.actual}</p>
       <p>Remaining: ${details.waitlist.remaining}</p>
     </div>` : '<p>Waitlist info not available</p>';
-
-    const instructorDisplay = details.instructor || '';
-    const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
-    const rmpLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg inline-block ml-2">⭐ Rate Instructor</a>` : '';
 
     modalBody.innerHTML = `
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -639,7 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
       li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex flex-col gap-1';
       const courseNumber = getCourseNumber(course);
       const seatsText = course.seats ? `${course.seats.remaining ?? (course.seats.capacity - course.seats.actual)} / ${course.seats.capacity} seats` : 'Seats info N/A';
-      const instructorDisplay = course.instructor || 'TBA';
+      const instructorDisplay = course.instructor || extractInstructorFrom(course) || 'TBA';
       const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
       const rmpMiniLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="text-red-600 dark:text-red-400 text-xs underline ml-1">Rate Instructor</a>` : '';
 
@@ -995,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tbaListEl.appendChild(li);
   }
 
-  // Toggle schedule on/off
+  // Toggle schedule on/off 
   function toggleSchedule(show) {
     const filterControls = document.getElementById('filter-controls');
 
@@ -1029,4 +1063,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-}); 
+  // initialize some visual states for bookmarked/watched buttons when page first loads (in case persisted)
+  function initButtonStates() {
+    document.querySelectorAll('.bookmark-btn').forEach(b => {
+      const crn = String(b.dataset.crn);
+      if (bookmarks.includes(crn)) {
+        b.innerText = '★';
+        b.classList.add('bg-yellow-500');
+        b.classList.remove('bg-gray-400');
+      } else {
+        b.innerText = '☆';
+        b.classList.remove('bg-yellow-500');
+        b.classList.add('bg-gray-400');
+      }
+    });
+    document.querySelectorAll('.watch-btn').forEach(w => {
+      const crn = String(w.dataset.crn);
+      if (watchedCourses.includes(crn)) {
+        w.classList.add('bg-sky-500');
+        w.classList.remove('bg-gray-400');
+        w.setAttribute('title', 'Watching');
+        w.setAttribute('aria-pressed', 'true');
+      } else {
+        w.classList.remove('bg-sky-500');
+        w.classList.add('bg-gray-400');
+        w.setAttribute('title', 'Watch');
+        w.setAttribute('aria-pressed', 'false');
+      }
+    });
+  }
+
+  // run init on a short timeout so DOM is present after displayCourses calls
+  setTimeout(initButtonStates, 350);
+
+});
