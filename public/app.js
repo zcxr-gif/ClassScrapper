@@ -1,4 +1,4 @@
-// app.js (fixed) - fetches per-course details to populate seats/progress bar
+// app.js (fixed + RateMyProfessors links)
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalBody = document.getElementById('modal-body');
   const darkToggle = document.getElementById('dark-toggle');
   const root = document.documentElement;
+
+  // --- RMP config ---
+  const RMP_SCHOOL_ID = '14046'; // Farmingdale. Change if needed
+  function rmpUrlFor(name) {
+    return `https://www.ratemyprofessors.com/search/professors/${RMP_SCHOOL_ID}?q=${encodeURIComponent(name)}`;
+  }
 
   // --- Menu elements ---
   const menuToggleBtn = document.getElementById('menu-toggle-btn');
@@ -29,10 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Menu toggle ---
-  menuToggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    menuDropdown.classList.toggle('hidden');
-  });
+  if (menuToggleBtn) {
+    menuToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menuDropdown.classList.toggle('hidden');
+    });
+  }
 
   // --- Options Panel (slide-out) ---
   const optionsPanel = document.createElement('div');
@@ -57,18 +65,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const showBookmarksTab = optionsPanel.querySelector('#show-bookmarks-tab');
   const showWatchedTab = optionsPanel.querySelector('#show-watched-tab');
 
-  menuOptionsBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    optionsPanel.classList.remove('-translate-x-full');
-    menuDropdown.classList.add('hidden');
-  });
+  if (menuOptionsBtn) {
+    menuOptionsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      optionsPanel.classList.remove('-translate-x-full');
+      if (menuDropdown) menuDropdown.classList.add('hidden');
+    });
+  }
   closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
 
   // Click outside closes menus/panels
   document.addEventListener('click', (e) => {
-    const isClickInsideOptions = optionsPanel.contains(e.target) || menuOptionsBtn.contains(e.target);
+    const isClickInsideOptions = optionsPanel.contains(e.target) || (menuOptionsBtn && menuOptionsBtn.contains(e.target));
     if (!isClickInsideOptions) optionsPanel.classList.add('-translate-x-full');
-    if (!menuToggleBtn.contains(e.target)) menuDropdown.classList.add('hidden');
+    if (menuToggleBtn && !menuToggleBtn.contains(e.target) && menuDropdown) menuDropdown.classList.add('hidden');
   });
 
   // --- Data ---
@@ -125,27 +135,34 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.appendChild(scheduleContainer);
 
   // --- Fetch terms ---
-  fetch('/terms')
-    .then(res => res.json())
-    .then(data => {
-      termsData = data;
-      populateTerms(data);
-      termSelect.disabled = false;
-    })
-    .catch(() => termSelect.innerHTML = '<option>Error loading terms</option>');
+  if (termSelect) {
+    fetch('/terms')
+      .then(res => res.json())
+      .then(data => {
+        termsData = data;
+        populateTerms(data);
+        termSelect.disabled = false;
+      })
+      .catch(() => termSelect.innerHTML = '<option>Error loading terms</option>');
+  }
 
-  termSelect.addEventListener('change', () => {
-    const selectedTerm = termsData.find(t => t.termCode === termSelect.value);
-    if (selectedTerm) populateSubjects(selectedTerm.subjects);
-    subjectSelect.disabled = !selectedTerm;
-    coursesContainer.innerHTML = '';
-  });
+  if (termSelect) {
+    termSelect.addEventListener('change', () => {
+      const selectedTerm = termsData.find(t => t.termCode === termSelect.value);
+      if (selectedTerm) populateSubjects(selectedTerm.subjects);
+      subjectSelect.disabled = !selectedTerm;
+      if (coursesContainer) coursesContainer.innerHTML = '';
+    });
+  }
 
-  subjectSelect.addEventListener('change', () => {
-    if (termSelect.value && subjectSelect.value) fetchCourses(termSelect.value, subjectSelect.value);
-  });
+  if (subjectSelect) {
+    subjectSelect.addEventListener('change', () => {
+      if (termSelect.value && subjectSelect.value) fetchCourses(termSelect.value, subjectSelect.value);
+    });
+  }
 
   function populateTerms(terms) {
+    if (!termSelect) return;
     termSelect.innerHTML = '<option value="">Select a Term</option>';
     terms.forEach(term => {
       const option = document.createElement('option');
@@ -156,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function populateSubjects(subjects) {
+    if (!subjectSelect) return;
     subjectSelect.innerHTML = '<option value="">Select a Subject</option>';
     subjects.forEach(code => {
       const option = document.createElement('option');
@@ -167,20 +185,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Fetch & display courses ---
   function fetchCourses(term, subject) {
-    loadingMessage.classList.remove('hidden');
-    coursesContainer.innerHTML = '';
+    if (loadingMessage) loadingMessage.classList.remove('hidden');
+    if (coursesContainer) coursesContainer.innerHTML = '';
     fetch(`/courses/${term}/${subject}`)
       .then(res => res.json())
       .then(data => {
-        loadingMessage.classList.add('hidden');
+        if (loadingMessage) loadingMessage.classList.add('hidden');
         allCourses = data.courses || [];
         // normalize some fields to make filtering more robust
         allCourses = allCourses.map(c => normalizeCourse(c));
         displayCourses(allCourses);
       })
       .catch(() => {
-        loadingMessage.classList.add('hidden');
-        coursesContainer.innerHTML = `<p class="text-red-600">Error loading courses.</p>`;
+        if (loadingMessage) loadingMessage.classList.add('hidden');
+        if (coursesContainer) coursesContainer.innerHTML = `<p class="text-red-600">Error loading courses.</p>`;
       });
   }
 
@@ -188,23 +206,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function parseSeatValue(v) {
     if (v === null || v === undefined) return NaN;
     const s = String(v).trim();
-    // remove commas and non-digit except negative sign (shouldn't be negative)
     const cleaned = s.replace(/[^\d-]/g, '');
     const n = parseInt(cleaned, 10);
     return isNaN(n) ? NaN : n;
   }
 
   function normalizeCourse(course) {
-    // Ensure common fields exist & canonical forms
     const c = Object.assign({}, course);
-    // prefer course.courseCode or fallback to subjectCode + courseNumber/section
     if (!c.courseCode) {
       const maybeNum = c.courseNumber || c.section || '';
       c.courseCode = `${c.subjectCode || ''} ${maybeNum}`.trim();
     }
-    // ensure schedule is array
     if (!Array.isArray(c.schedule)) c.schedule = c.schedule ? [c.schedule] : [];
-    // normalize seats if present
     if (c.seats) {
       c.seats.capacity = c.seats.capacity ?? c.seats.total ?? null;
       c.seats.actual = c.seats.actual ?? c.seats.taken ?? null;
@@ -226,46 +239,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function clamp(v, a=0, b=100) { return Math.max(a, Math.min(b, v)); }
 
-  // Robust extraction of the 3-digit course number (100/200/300..)
   function getCourseNumber(course) {
-    // prefer an explicit field if backend provides it
     if (course.courseNumber) {
       const digits = String(course.courseNumber).match(/\d{3}/);
       if (digits) return digits[0].padStart(3, '0');
     }
-    // check courseCode, courseName/title for patterns like "SUBJ 101" or "(101)" or standalone 3-digit
     const combined = `${course.courseCode || ''} ${course.courseName || ''} ${course.title || ''}`;
-    // first try subject + number pattern
     if (course.subjectCode) {
       const reSubj = new RegExp(`${course.subjectCode}\\s*([0-9]{3})`, 'i');
       const m1 = combined.match(reSubj);
       if (m1) return m1[1];
     }
-    // fallback: first standalone 3-digit number
     const m2 = combined.match(/\b([0-9]{3})\b/);
     if (m2) return m2[1];
     return '';
   }
 
-  // NEW: robust level extraction used by filters (returns 100,200,300,... or null)
   function getCourseLevel(course) {
-    // Try several fields to find a numeric course id (3-digit or more)
     const fields = [course.courseNumber, course.courseCode, course.section, course.title, course.courseName];
     for (const f of fields) {
       if (!f) continue;
       const str = String(f);
-      // find the first occurrence of a 3-digit or 2+ digit number (e.g., 101, 45)
       const m = str.match(/\b(\d{2,4})\b/);
       if (m) {
         const num = parseInt(m[1], 10);
         if (!isNaN(num)) {
-          // normalize to 100-level increments (e.g., 101 -> 100, 250 -> 200)
           const level = Math.floor(num / 100) * 100;
-          return level === 0 ? 100 : level; // treat 0-99 as 100-level fallback
+          return level === 0 ? 100 : level;
         }
       }
     }
-    // fallback: try getCourseNumber (3-digit)
     const numStr = getCourseNumber(course);
     if (numStr) {
       const num = parseInt(numStr, 10);
@@ -289,12 +292,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (bar) {
       bar.style.width = `${seatsPercent}%`;
-      // replace color classes (simple approach)
       bar.className = `h-3 rounded-full ${seatsColor}`;
       bar.setAttribute('aria-valuenow', seatsPercent);
     }
     if (label) {
-      // show both percentage and raw numbers
       if (isNaN(capacity) || capacity === 0) {
         label.textContent = 'Seats: N/A';
       } else {
@@ -305,7 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
       wrapper.title = isNaN(capacity) || capacity === 0 ? 'Seats info unavailable' : `${actual} taken of ${capacity} — ${seatsPercent}% full`;
     }
 
-    // update allCourses entry if present
     const idx = allCourses.findIndex(c => String(c.crn) === String(crn));
     if (idx >= 0) {
       allCourses[idx].seats = { capacity, actual, remaining };
@@ -314,6 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Display courses (clean, compact card) ---
   function displayCourses(courses) {
+    if (!coursesContainer) return;
     coursesContainer.innerHTML = '';
     if (!courses.length) {
       coursesContainer.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No courses found.</p>`;
@@ -344,10 +345,14 @@ document.addEventListener('DOMContentLoaded', () => {
         unknown: '<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>'
       }[type];
 
+      const instructorDisplay = course.instructor || 'TBA';
+      const hasInstructor = instructorDisplay && instructorDisplay !== 'TBA';
+
+      const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 text-xs underline text-red-600 dark:text-red-400">Rate</a>` : '';
+
       const card = document.createElement('div');
       card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
 
-      // ALWAYS include seat wrapper (start as loading). We'll fill it after fetching course-details.
       card.innerHTML = `
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex justify-between items-start gap-2">
@@ -365,7 +370,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="p-4 space-y-3 flex-grow">
           <div class="flex items-center gap-2 text-sm">
             <span>👨‍🏫</span>
-            <span class="font-medium">${course.instructor || 'TBA'}</span>
+            <span class="font-medium">${instructorDisplay}</span>
+            ${rmpSmallLinkHTML}
           </div>
           ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
         </div>
@@ -377,17 +383,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
               <div id="seat-bar-${crn}" class="h-3 rounded-full bg-gray-400" style="width:0%"></div>
               <div id="seat-overlay-${crn}" class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-gray-800 dark:text-gray-100 pointer-events-none">
-                <!-- overlay label (updated after fetch) -->
               </div>
             </div>
         </div>
 
         <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex flex-wrap gap-2 justify-between">
-          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect.value}" data-crn="${crn}">Details</button>
+          <button class="details-btn flex-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect ? termSelect.value : ''}" data-crn="${crn}">Details</button>
           <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="flex-1 text-center px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
           <div class="flex flex-1 gap-2">
             <button class="bookmark-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(String(crn)) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${bookmarks.includes(String(crn)) ? '★' : '☆'}</button>
-            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect.value}" title="Watch">👁</button>
+            <button class="watch-btn w-full px-2 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="Watch">👁</button>
             <button class="copy-crn-btn w-full px-2 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN">📋</button>
           </div>
         </div>
@@ -401,13 +406,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const actual = parseSeatValue(course.seats.actual);
         const remaining = typeof course.seats.remaining === 'number' ? course.seats.remaining : parseSeatValue(course.seats.remaining);
         updateSeatUI(crn, capacity, actual, remaining);
-        // fill overlay text element too
         const overlay = document.getElementById(`seat-overlay-${crn}`);
         if (overlay) overlay.textContent = `${isNaN(capacity) || capacity === 0 ? '' : Math.round((actual/capacity)*100)}% full`;
       } else {
-        // fetch details to get seats
-        // small optimization: don't fetch if term isn't selected yet
-        const selectedTerm = termSelect.value;
+        const selectedTerm = termSelect ? termSelect.value : '';
         if (selectedTerm) {
           fetch(`/course-details/${selectedTerm}/${crn}`)
             .then(r => {
@@ -416,7 +418,6 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(details => {
               if (!details || !details.seats) {
-                // show N/A
                 const label = document.getElementById(`seat-label-${crn}`);
                 const overlay = document.getElementById(`seat-overlay-${crn}`);
                 if (label) label.textContent = 'Seats: N/A';
@@ -439,7 +440,6 @@ document.addEventListener('DOMContentLoaded', () => {
               if (overlay) overlay.textContent = '';
             });
         } else {
-          // term not selected (shouldn't happen for list), show N/A
           const label = document.getElementById(`seat-label-${crn}`);
           const overlay = document.getElementById(`seat-overlay-${crn}`);
           if (label) label.textContent = 'Seats: N/A';
@@ -450,21 +450,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Event delegation for buttons in course list ---
-  coursesContainer.addEventListener('click', e => {
-    const target = e.target;
-    if (target.classList.contains('details-btn')) fetchCourseDetails(termSelect.value, target.dataset.crn);
-    if (target.classList.contains('bookmark-btn')) toggleBookmark(target);
-    if (target.classList.contains('watch-btn')) toggleWatch(target);
-    if (target.classList.contains('copy-crn-btn')) handleCopyButton(target);
-  });
+  if (coursesContainer) {
+    coursesContainer.addEventListener('click', e => {
+      const target = e.target;
+      if (target.classList.contains('details-btn')) fetchCourseDetails(termSelect ? termSelect.value : '', target.dataset.crn);
+      if (target.classList.contains('bookmark-btn')) toggleBookmark(target);
+      if (target.classList.contains('watch-btn')) toggleWatch(target);
+      if (target.classList.contains('copy-crn-btn')) handleCopyButton(target);
+    });
+  }
 
   function handleCopyButton(button) {
-    // find the CRN in the card (it is in the markup)
     const card = button.closest('div');
     const crnMatch = card ? card.innerText.match(/CRN:\s*([0-9]+)/) : null;
     const crn = crnMatch ? crnMatch[1] : null;
     if (!crn) {
-      // fallback: attempt dataset on buttons next to it
       const btnData = card.querySelector('[data-crn]');
       if (btnData) {
         try { navigator.clipboard.writeText(btnData.dataset.crn); showCopyFeedback(button); return; } catch {}
@@ -472,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('CRN not found to copy.');
       return;
     }
-    // use clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(crn).then(() => showCopyFeedback(button), () => fallbackCopy(crn, button));
     } else {
@@ -504,12 +503,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- Bookmark / Watch toggles ---
+  // --- Bookmark / Watch functions ---
   function toggleBookmark(button) {
     const crn = String(button.dataset.crn);
     bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    // update visual
     if (bookmarks.includes(crn)) {
       button.textContent = '★';
       button.classList.add('bg-yellow-500');
@@ -525,7 +523,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const crn = String(button.dataset.crn);
     const term = button.dataset.term;
     const watching = watchedCourses.includes(crn);
-    // optimistic UI: update locally immediately and then call endpoint
     if (!watching) {
       watchedCourses = [...watchedCourses, crn];
       localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
@@ -545,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Modal ---
   function fetchCourseDetails(term, crn) {
+    if (!modalBody || !modal) return;
     modalBody.innerHTML = '<div class="text-center py-6">Loading...</div>';
     modalTitle.textContent = '';
     modal.classList.remove('hidden');
@@ -572,27 +570,34 @@ document.addEventListener('DOMContentLoaded', () => {
       <p>Remaining: ${details.waitlist.remaining}</p>
     </div>` : '<p>Waitlist info not available</p>';
 
+    const instructorDisplay = details.instructor || '';
+    const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
+    const rmpLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg inline-block ml-2">⭐ Rate Instructor</a>` : '';
+
     modalBody.innerHTML = `
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <p><span class="font-semibold">Term:</span> ${details.associatedTerm || 'N/A'}</p>
           <p><span class="font-semibold">Levels:</span> ${details.levels || 'N/A'}</p>
           <p><span class="font-semibold">Credits:</span> ${details.credits || 'N/A'}</p>
+          <p class="mt-2"><span class="font-semibold">Instructor:</span> ${instructorDisplay || 'TBA'} ${hasInstructor ? `<a class="text-sm text-red-600 dark:text-red-400 ml-1" href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer">View on RMP</a>` : ''}</p>
         </div>
         <div class="flex gap-2 flex-col">${seats}${waitlist}</div>
       </div>
-      <div class="mt-4">
+      <div class="mt-4 flex gap-2">
         <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg inline-block">📝 Sign Up in OASIS</a>
+        ${rmpLink}
       </div>
     `;
   }
 
   const closeModal = () => modal.classList.add('hidden');
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-  // guard for missing close-button if DOM was modified
-  const closeBtn = modal.querySelector('.close-button');
-  if (closeBtn) closeBtn.addEventListener('click', closeModal);
-  window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  if (modal) {
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+    const closeBtn = modal.querySelector('.close-button');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  }
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) closeModal(); });
 
   // --- Bookmarks / Watched mini cards in options panel ---
   function populateOptionsList(list, type) {
@@ -605,7 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
     list.forEach(crn => {
       const course = allCourses.find(c => String(c.crn) === String(crn));
       if (!course) {
-        // If course not currently loaded, still show CRN
         const liMissing = document.createElement('div');
         liMissing.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
         liMissing.innerHTML = `
@@ -635,11 +639,15 @@ document.addEventListener('DOMContentLoaded', () => {
       li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex flex-col gap-1';
       const courseNumber = getCourseNumber(course);
       const seatsText = course.seats ? `${course.seats.remaining ?? (course.seats.capacity - course.seats.actual)} / ${course.seats.capacity} seats` : 'Seats info N/A';
+      const instructorDisplay = course.instructor || 'TBA';
+      const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
+      const rmpMiniLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="text-red-600 dark:text-red-400 text-xs underline ml-1">Rate Instructor</a>` : '';
+
       li.innerHTML = `
         <div class="flex justify-between items-start">
           <div>
             <p class="font-semibold text-sm">${course.subjectCode} ${courseNumber} – ${course.courseName}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-300">Instructor: ${course.instructor || 'TBA'}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">Instructor: ${instructorDisplay} ${rmpMiniLink}</p>
             <p class="text-xs text-gray-600 dark:text-gray-300">${seatsText}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Click ✖ to remove from ${type}</p>
           </div>
@@ -651,13 +659,12 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       li.querySelector('.details-mini-btn').addEventListener('click', () => {
-        fetchCourseDetails(termSelect.value, crn);
+        fetchCourseDetails(termSelect ? termSelect.value : '', crn);
         optionsPanel.classList.add('-translate-x-full');
       });
 
       li.querySelector('.remove-btn').addEventListener('click', (e) => {
-        e.stopPropagation(); 
-        
+        e.stopPropagation();
         if (type === 'bookmark') {
           bookmarks = bookmarks.filter(c => c !== crn);
           localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
@@ -672,8 +679,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarks, 'bookmark'));
-  showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourses, 'watched'));
+  if (showBookmarksTab) showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarks, 'bookmark'));
+  if (showWatchedTab) showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourses, 'watched'));
 
   // --- Search/filter/sort ---
   const searchInput = document.getElementById('course-search');
@@ -704,26 +711,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // --- Level filter (fixed) ---
     if (levelFilter?.value && levelFilter.value !== 'all') {
       const selectedLevelNum = parseInt(levelFilter.value, 10);
       filtered = filtered.filter(c => {
         const lvl = getCourseLevel(c);
-        if (lvl === null) return false; // unknown level, exclude
+        if (lvl === null) return false;
         return lvl === selectedLevelNum;
       });
     }
 
-    // --- Availability filter: check seats safely ---
     if (availabilityFilter?.value) {
       filtered = filtered.filter(c => {
-        // If seats not present, try to check cached seats or treat as unknown (exclude)
         if (!c.seats) return false;
         const capacity = parseSeatValue(c.seats.capacity) || 0;
         const actual = parseSeatValue(c.seats.actual) || 0;
         const remaining = (typeof c.seats.remaining === 'number') ? c.seats.remaining : (capacity - actual);
         if (capacity === 0) {
-          // treat as unknown => exclude
           return false;
         }
         if (availabilityFilter.value === 'open') return remaining > 0;
@@ -746,19 +749,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
     const days = new Set();
 
-    // long names first
     if (s.includes('MON')) days.add(0);
     if (s.includes('TUE')) days.add(1);
     if (s.includes('WED')) days.add(2);
     if (s.includes('THU')) days.add(3);
     if (s.includes('FRI')) days.add(4);
 
-    // two-letter abbreviations next (TR or TH for Thursday, careful)
-    if (s.includes('TR')) days.add(3); // TR is commonly used for Thu/Thu-Thu combos
+    if (s.includes('TR')) days.add(3);
     if (s.includes('TH')) days.add(3);
 
-    // single-letter fallback (ensure T doesn't double-count if TR/TH found)
-    // Only add T => Tuesday if not already captured by TUE or TR/TH presence
     if (!s.includes('TUE') && !s.includes('TR') && !s.includes('TH') && s.includes('T')) days.add(1);
     if (!s.includes('MON') && s.includes('M')) days.add(0);
     if (!s.includes('WED') && s.includes('W')) days.add(2);
@@ -878,7 +877,8 @@ document.addEventListener('DOMContentLoaded', () => {
     tbaWrap.innerHTML = `<h3 class="text-lg font-medium mb-2">TBA / Unscheduled Courses</h3><div id="tba-list" class="space-y-2"></div>`;
     scheduleContainer.appendChild(tbaWrap);
 
-    scheduleContainer.querySelector('#back-to-list').addEventListener('click', () => toggleSchedule(false));
+    const backBtn = scheduleContainer.querySelector('#back-to-list');
+    if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
   }
 
   function minutesToSlotIndex(mins) {
@@ -936,7 +936,7 @@ document.addEventListener('DOMContentLoaded', () => {
           `;
           block.addEventListener('click', (ev) => {
             ev.stopPropagation();
-            fetchCourseDetails(termSelect.value, course.crn);
+            fetchCourseDetails(termSelect ? termSelect.value : '', course.crn);
           });
 
           let hasConflict = false;
@@ -991,7 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="small-details px-2 py-1 rounded bg-blue-600 text-white text-sm">Details</button>
       </div>
     `;
-    li.querySelector('.small-details').addEventListener('click', () => fetchCourseDetails(termSelect.value, course.crn));
+    li.querySelector('.small-details').addEventListener('click', () => fetchCourseDetails(termSelect ? termSelect.value : '', course.crn));
     tbaListEl.appendChild(li);
   }
 
@@ -1009,22 +1009,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      filterControls.classList.add('hidden');
-      coursesContainer.classList.add('hidden');
+      if (filterControls) filterControls.classList.add('hidden');
+      if (coursesContainer) coursesContainer.classList.add('hidden');
       scheduleContainer.classList.remove('hidden');
       buildSchedule(bookmarkedCourses);
     } else {
       scheduleContainer.classList.add('hidden');
-      filterControls.classList.remove('hidden');
-      coursesContainer.classList.remove('hidden');
+      if (filterControls) filterControls.classList.remove('hidden');
+      if (coursesContainer) coursesContainer.classList.remove('hidden');
     }
   }
 
-  menuScheduleBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    const isScheduleVisible = !scheduleContainer.classList.contains('hidden');
-    toggleSchedule(!isScheduleVisible);
-    menuDropdown.classList.add('hidden');
-  });
+  if (menuScheduleBtn) {
+    menuScheduleBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isScheduleVisible = !scheduleContainer.classList.contains('hidden');
+      toggleSchedule(!isScheduleVisible);
+      if (menuDropdown) menuDropdown.classList.add('hidden');
+    });
+  }
 
-});
+}); 
