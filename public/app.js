@@ -174,6 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(data => {
         loadingMessage.classList.add('hidden');
         allCourses = data.courses || [];
+        // normalize some fields to make filtering more robust
+        allCourses = allCourses.map(c => normalizeCourse(c));
         displayCourses(allCourses);
       })
       .catch(() => {
@@ -192,10 +194,29 @@ document.addEventListener('DOMContentLoaded', () => {
     return isNaN(n) ? NaN : n;
   }
 
+  function normalizeCourse(course) {
+    // Ensure common fields exist & canonical forms
+    const c = Object.assign({}, course);
+    // prefer course.courseCode or fallback to subjectCode + courseNumber/section
+    if (!c.courseCode) {
+      const maybeNum = c.courseNumber || c.section || '';
+      c.courseCode = `${c.subjectCode || ''} ${maybeNum}`.trim();
+    }
+    // ensure schedule is array
+    if (!Array.isArray(c.schedule)) c.schedule = c.schedule ? [c.schedule] : [];
+    // normalize seats if present
+    if (c.seats) {
+      c.seats.capacity = c.seats.capacity ?? c.seats.total ?? null;
+      c.seats.actual = c.seats.actual ?? c.seats.taken ?? null;
+      c.seats.remaining = c.seats.remaining ?? (c.seats.capacity && c.seats.actual ? (parseSeatValue(c.seats.capacity) - parseSeatValue(c.seats.actual)) : null);
+    }
+    return c;
+  }
+
   // --- Course helpers ---
   function getCourseType(course) {
     if (!course || !Array.isArray(course.schedule) || course.schedule.length === 0) return 'unknown';
-    const hasOnline = course.schedule.some(s => (s.where || '').toUpperCase().includes('ONLINE'));
+    const hasOnline = course.schedule.some(s => (s.where || '').toUpperCase().includes('ONLINE') || (s.type || '').toUpperCase().includes('ONLINE'));
     const hasInPerson = course.schedule.some(s => !((s.where || '').toUpperCase().includes('ONLINE')));
     if (hasOnline && hasInPerson) return 'hybrid';
     if (hasOnline) return 'online';
@@ -212,19 +233,45 @@ document.addEventListener('DOMContentLoaded', () => {
       const digits = String(course.courseNumber).match(/\d{3}/);
       if (digits) return digits[0].padStart(3, '0');
     }
-    // check courseTitle/name for patterns like "SUBJ 101" or "(101)" or standalone 3-digit
-    const name = (course.courseName || '') + ' ' + (course.title || '');
-    // look for pattern "SUBJ 101" (subject code might appear)
-    const subj = course.subjectCode || '';
-    if (subj) {
-      const reSubj = new RegExp(`${subj}\\s*([0-9]{3})`, 'i');
-      const m1 = name.match(reSubj);
+    // check courseCode, courseName/title for patterns like "SUBJ 101" or "(101)" or standalone 3-digit
+    const combined = `${course.courseCode || ''} ${course.courseName || ''} ${course.title || ''}`;
+    // first try subject + number pattern
+    if (course.subjectCode) {
+      const reSubj = new RegExp(`${course.subjectCode}\\s*([0-9]{3})`, 'i');
+      const m1 = combined.match(reSubj);
       if (m1) return m1[1];
     }
     // fallback: first standalone 3-digit number
-    const m2 = name.match(/\b([0-9]{3})\b/);
+    const m2 = combined.match(/\b([0-9]{3})\b/);
     if (m2) return m2[1];
     return '';
+  }
+
+  // NEW: robust level extraction used by filters (returns 100,200,300,... or null)
+  function getCourseLevel(course) {
+    // Try several fields to find a numeric course id (3-digit or more)
+    const fields = [course.courseNumber, course.courseCode, course.section, course.title, course.courseName];
+    for (const f of fields) {
+      if (!f) continue;
+      const str = String(f);
+      // find the first occurrence of a 3-digit or 2+ digit number (e.g., 101, 45)
+      const m = str.match(/\b(\d{2,4})\b/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (!isNaN(num)) {
+          // normalize to 100-level increments (e.g., 101 -> 100, 250 -> 200)
+          const level = Math.floor(num / 100) * 100;
+          return level === 0 ? 100 : level; // treat 0-99 as 100-level fallback
+        }
+      }
+    }
+    // fallback: try getCourseNumber (3-digit)
+    const numStr = getCourseNumber(course);
+    if (numStr) {
+      const num = parseInt(numStr, 10);
+      if (!isNaN(num)) return Math.floor(num / 100) * 100;
+    }
+    return null;
   }
 
   // --- Update seat UI after details fetched ---
@@ -462,9 +509,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const crn = String(button.dataset.crn);
     bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    button.textContent = bookmarks.includes(crn) ? '★ Bookmarked' : '☆ Bookmark';
-    button.classList.toggle('bg-yellow-500', bookmarks.includes(crn));
-    button.classList.toggle('bg-gray-300', !bookmarks.includes(crn));
+    // update visual
+    if (bookmarks.includes(crn)) {
+      button.textContent = '★';
+      button.classList.add('bg-yellow-500');
+      button.classList.remove('bg-gray-400');
+    } else {
+      button.textContent = '☆';
+      button.classList.remove('bg-yellow-500');
+      button.classList.add('bg-gray-400');
+    }
   }
 
   function toggleWatch(button) {
@@ -482,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       watchedCourses = watchedCourses.filter(c => c !== crn);
       localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      button.textContent = '👁 Watch';
+      button.textContent = '👁';
       button.classList.remove('bg-blue-500');
       button.classList.add('bg-gray-300');
       fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {/* ignore network errors for now */});
@@ -639,7 +693,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (query) filtered = filtered.filter(c =>
       (c.courseName || '').toLowerCase().includes(query) ||
       (c.instructor || '').toLowerCase().includes(query) ||
-      String(c.crn || '').includes(query)
+      String(c.crn || '').includes(query) ||
+      (c.courseCode || '').toLowerCase().includes(query)
     );
 
     if (typeFilter?.value) {
@@ -649,21 +704,23 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // --- Level filter ---
-    if (levelFilter?.value) {
+    // --- Level filter (fixed) ---
+    if (levelFilter?.value && levelFilter.value !== 'all') {
+      const selectedLevelNum = parseInt(levelFilter.value, 10);
       filtered = filtered.filter(c => {
-        const num = getCourseNumber(c);
-        if (!num) return false;
-        return num.charAt(0) === String(levelFilter.value);
+        const lvl = getCourseLevel(c);
+        if (lvl === null) return false; // unknown level, exclude
+        return lvl === selectedLevelNum;
       });
     }
 
     // --- Availability filter: check seats safely ---
     if (availabilityFilter?.value) {
       filtered = filtered.filter(c => {
+        // If seats not present, try to check cached seats or treat as unknown (exclude)
         if (!c.seats) return false;
-        const capacity = Number(c.seats.capacity) || 0;
-        const actual = Number(c.seats.actual) || 0;
+        const capacity = parseSeatValue(c.seats.capacity) || 0;
+        const actual = parseSeatValue(c.seats.actual) || 0;
         const remaining = (typeof c.seats.remaining === 'number') ? c.seats.remaining : (capacity - actual);
         if (capacity === 0) {
           // treat as unknown => exclude
@@ -683,24 +740,29 @@ document.addEventListener('DOMContentLoaded', () => {
     displayCourses(filtered);
   }
 
-  // --- Schedule helpers (unchanged logic mostly) ---
+  // --- Schedule helpers (improved/cleaned) ---
   function parseDaysString(daysStr) {
     if (!daysStr) return [];
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
     const days = new Set();
-    if (s.includes('M')) days.add(0);
-    if (s.includes('W')) days.add(2);
-    if (s.includes('F')) days.add(4);
-    if (s.includes('TR')) days.add(3);
-    if (s.includes('TH')) days.add(3);
-    else if (s.includes('TR')) days.add(3);
-    else if (s.includes('T')) days.add(1);
 
+    // long names first
     if (s.includes('MON')) days.add(0);
     if (s.includes('TUE')) days.add(1);
     if (s.includes('WED')) days.add(2);
     if (s.includes('THU')) days.add(3);
     if (s.includes('FRI')) days.add(4);
+
+    // two-letter abbreviations next (TR or TH for Thursday, careful)
+    if (s.includes('TR')) days.add(3); // TR is commonly used for Thu/Thu-Thu combos
+    if (s.includes('TH')) days.add(3);
+
+    // single-letter fallback (ensure T doesn't double-count if TR/TH found)
+    // Only add T => Tuesday if not already captured by TUE or TR/TH presence
+    if (!s.includes('TUE') && !s.includes('TR') && !s.includes('TH') && s.includes('T')) days.add(1);
+    if (!s.includes('MON') && s.includes('M')) days.add(0);
+    if (!s.includes('WED') && s.includes('W')) days.add(2);
+    if (!s.includes('FRI') && s.includes('F')) days.add(4);
 
     return Array.from(days).sort((a, b) => a - b);
   }
