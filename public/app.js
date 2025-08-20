@@ -1,4 +1,4 @@
-// app.js (fixed + RateMyProfessors links + UI fixes)
+// app.js (fixed + RateMyProfessors links + modern Monday-Sunday schedule)
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -105,30 +105,29 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const subjectColorMap = {
-    ANT: 'bg-red-400', ARC: 'bg-green-400', ART: 'bg-blue-400', AIM: 'bg-yellow-400',
-    AET: 'bg-lime-500', AVN: 'bg-purple-400', BIO: 'bg-pink-400', BUS: 'bg-indigo-400',
-    CHM: 'bg-teal-400', CHI: 'bg-red-500', CIV: 'bg-gray-500', CSC: 'bg-orange-400',
-    CPS: 'bg-sky-500', BCS: 'bg-cyan-400', CON: 'bg-amber-500', CRJ: 'bg-rose-500',
-    DEN: 'bg-teal-300', ECO: 'bg-green-500', EET: 'bg-blue-500', ETM: 'bg-violet-400',
-    EGL: 'bg-rose-400', ENV: 'bg-emerald-400', FYE: 'bg-gray-400', FRE: 'bg-blue-300',
-    FRX: 'bg-indigo-300', GIS: 'bg-emerald-600', GEO: 'bg-lime-600', GER: 'bg-amber-400',
-    GRO: 'bg-fuchsia-400', HPW: 'bg-green-300', HIS: 'bg-orange-500', HON: 'bg-yellow-300',
-    HOR: 'bg-lime-400', HUM: 'bg-pink-300', IND: 'bg-cyan-500', IXD: 'bg-sky-400',
+    ANT: 'bg-red-500', ARC: 'bg-green-500', ART: 'bg-blue-500', AIM: 'bg-yellow-500',
+    AET: 'bg-lime-600', AVN: 'bg-purple-500', BIO: 'bg-pink-500', BUS: 'bg-indigo-600',
+    CHM: 'bg-teal-500', CHI: 'bg-red-600', CIV: 'bg-gray-600', CSC: 'bg-orange-500',
+    CPS: 'bg-sky-600', BCS: 'bg-cyan-500', CON: 'bg-amber-500', CRJ: 'bg-rose-600',
+    DEN: 'bg-teal-400', ECO: 'bg-green-600', EET: 'bg-blue-600', ETM: 'bg-violet-500',
+    EGL: 'bg-rose-500', ENV: 'bg-emerald-500', FYE: 'bg-gray-500', FRE: 'bg-blue-400',
+    FRX: 'bg-indigo-400', GIS: 'bg-emerald-600', GEO: 'bg-lime-600', GER: 'bg-amber-500',
+    GRO: 'bg-fuchsia-500', HPW: 'bg-green-400', HIS: 'bg-orange-500', HON: 'bg-yellow-400',
+    HOR: 'bg-lime-400', HUM: 'bg-pink-400', IND: 'bg-cyan-600', IXD: 'bg-sky-500',
     ITA: 'bg-green-600', MTH: 'bg-indigo-500', MET: 'bg-gray-600', MLS: 'bg-teal-500',
-    MLG: 'bg-red-300', NUR: 'bg-rose-300', NTR: 'bg-lime-300', PHI: 'bg-purple-300',
+    MLG: 'bg-red-400', NUR: 'bg-rose-400', NTR: 'bg-lime-300', PHI: 'bg-purple-400',
     PED: 'bg-sky-300', PHY: 'bg-orange-300', POL: 'bg-indigo-600', PCM: 'bg-fuchsia-500',
     PSY: 'bg-violet-500', RAM: 'bg-yellow-500', RUS: 'bg-red-600', STS: 'bg-gray-500',
     SST: 'bg-sky-600', SOC: 'bg-pink-500', SPA: 'bg-orange-600', SPE: 'bg-fuchsia-300',
-    SMT: 'bg-blue-600', THE: 'bg-purple-500', VIS: 'bg-amber-300'
+    SMT: 'bg-blue-600', THE: 'bg-purple-500', VIS: 'bg-amber-400'
   };
 
   // --- Schedule config ---
   const SCHEDULE_START_HOUR = 7; // 7 AM
   const SCHEDULE_END_HOUR = 22;  // 10 PM
-  const SLOT_MINUTES = 15;       // 15-minute slots
-  const SLOTS_PER_DAY = ((SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * 60) / SLOT_MINUTES;
+  const SLOT_MINUTES = 15;       // used for parsing, not visual rows
 
-  // Schedule container added to body (hidden), can be moved into main if desired
+  // Schedule container added to body (hidden)
   const scheduleContainer = document.createElement('div');
   scheduleContainer.id = 'schedule-container';
   scheduleContainer.className = 'hidden p-4';
@@ -192,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(data => {
         if (loadingMessage) loadingMessage.classList.add('hidden');
         allCourses = data.courses || [];
-        // normalize some fields to make filtering more robust
         allCourses = allCourses.map(c => normalizeCourse(c));
         displayCourses(allCourses);
       })
@@ -320,7 +318,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function extractInstructorFrom(details) {
     if (!details) return '';
     if (details.instructor && String(details.instructor).trim()) return String(details.instructor).trim();
-    // common alternate shapes:
     if (details.instructors) {
       if (Array.isArray(details.instructors)) {
         const names = details.instructors.map(i => (typeof i === 'string' ? i : (i.name || i.fullName || i.instructor))).filter(Boolean);
@@ -331,7 +328,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return details.instructors.name || details.instructors.fullName || '';
       }
     }
-    // other possible fields
     if (details.teacher && String(details.teacher).trim()) return String(details.teacher).trim();
     if (details.faculty && String(details.faculty).trim()) return String(details.faculty).trim();
     return '';
@@ -496,7 +492,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const crn = String(button.dataset.crn);
     bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
     localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    // Update visual state without changing dimensions
     if (bookmarks.includes(crn)) {
       button.innerText = '★';
       button.classList.add('bg-yellow-500');
@@ -515,7 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!watching) {
       watchedCourses = [...watchedCourses, crn];
       localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      // Keep button content as icon but change color and aria
       button.classList.add('bg-sky-500');
       button.classList.remove('bg-gray-400');
       button.setAttribute('title', 'Watching');
@@ -547,7 +541,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function showCopyFeedback(button) {
-    // Visual feedback without changing button width: add ring and temporarily change background
     const origBg = button.className;
     button.classList.add('ring-2', 'ring-green-400');
     button.setAttribute('aria-label', 'Copied');
@@ -777,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
     displayCourses(filtered);
   }
 
-  // --- Schedule helpers (improved/cleaned) ---
+  // --- Time parsing & day parsing helpers (Mon-Sun) ---
   function parseDaysString(daysStr) {
     if (!daysStr) return [];
     const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
@@ -788,14 +781,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (s.includes('WED')) days.add(2);
     if (s.includes('THU')) days.add(3);
     if (s.includes('FRI')) days.add(4);
+    if (s.includes('SAT')) days.add(5);
+    if (s.includes('SUN')) days.add(6);
 
-    if (s.includes('TR')) days.add(3);
-    if (s.includes('TH')) days.add(3);
-
-    if (!s.includes('TUE') && !s.includes('TR') && !s.includes('TH') && s.includes('T')) days.add(1);
-    if (!s.includes('MON') && s.includes('M')) days.add(0);
-    if (!s.includes('WED') && s.includes('W')) days.add(2);
-    if (!s.includes('FRI') && s.includes('F')) days.add(4);
+    // shorter tokens fallback
+    if (s.includes('M') && !s.includes('MON')) days.add(0);
+    if (s.includes('TR') || (s.includes('TH') && !s.includes('THU'))) days.add(3);
+    if (s.includes('T') && !s.includes('TUE') && !s.includes('TH') && !s.includes('TR')) days.add(1);
+    if (s.includes('W') && !s.includes('WED')) days.add(2);
+    if (s.includes('F') && !s.includes('FRI')) days.add(4);
+    if (s.includes('S') && !s.includes('SAT') && !s.includes('SUN')) {
+      // ambiguous single 'S' - don't add unless explicitly SAT or SUN
+    }
 
     return Array.from(days).sort((a, b) => a - b);
   }
@@ -848,171 +845,144 @@ document.addEventListener('DOMContentLoaded', () => {
     return { start, end };
   }
 
-  function createScheduleSkeleton() {
+  // --- Modern table-based schedule builder (Mon-Sun) ---
+  function buildSchedule(courses) {
     scheduleContainer.innerHTML = '';
 
     const header = document.createElement('div');
-    header.className = 'mb-2 flex items-center gap-4';
+    header.className = 'mb-4 flex items-center gap-4';
     header.innerHTML = `
-      <h2 class="text-2xl font-semibold">Weekly Schedule Preview (Compact)</h2>
-      <div class="ml-auto flex gap-2">
+      <h2 class="text-2xl font-semibold">Weekly Schedule (Mon → Sun)</h2>
+      <div class="ml-auto">
         <button id="back-to-list" class="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">◀️ Back to List</button>
       </div>
     `;
     scheduleContainer.appendChild(header);
 
-    const gridWrap = document.createElement('div');
-    gridWrap.className = 'relative border rounded-lg bg-white dark:bg-gray-800 p-2 overflow-x-auto';
-
-    const grid = document.createElement('div');
-    grid.id = 'schedule-grid';
-    grid.className = 'grid';
-    grid.style.gridTemplateColumns = '80px repeat(5, minmax(150px, 1fr))';
-
-    grid.innerHTML = `
-      <div class="p-1 border-b text-sm font-medium bg-white dark:bg-gray-800">Time</div>
-      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Monday</div>
-      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Tuesday</div>
-      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Wednesday</div>
-      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Thursday</div>
-      <div class="p-1 border-b text-sm text-center font-medium bg-white dark:bg-gray-800">Friday</div>
+    // Container & table
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg';
+    const table = document.createElement('table');
+    table.className = 'w-full border-collapse text-sm min-w-[800px]';
+    table.innerHTML = `
+      <thead class="bg-gray-100 dark:bg-gray-700">
+        <tr>
+          <th class="p-2 border dark:border-gray-600 text-left w-20">Time</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Monday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Tuesday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Wednesday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Thursday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Friday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Saturday</th>
+          <th class="p-2 border dark:border-gray-600 text-center">Sunday</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-body"></tbody>
     `;
+    tableWrap.appendChild(table);
+    scheduleContainer.appendChild(tableWrap);
 
-    for (let slot = 0; slot < SLOTS_PER_DAY; slot++) {
-      const timeCell = document.createElement('div');
-      timeCell.className = 'p-1 text-[10px] text-gray-500 dark:text-gray-400 border-b bg-white dark:bg-gray-800';
+    const body = table.querySelector('#schedule-body');
 
-      if (slot % 4 === 0) {
-        const hour = SCHEDULE_START_HOUR + Math.floor(slot / 4);
-        const label = `${(hour % 12 === 0) ? 12 : hour % 12} ${hour >= 12 ? 'p' : 'a'}`;
-        timeCell.textContent = label;
-        timeCell.classList.add('font-semibold', 'text-gray-700', 'dark:text-gray-200');
-      }
-      grid.appendChild(timeCell);
-
-      for (let day = 0; day < 5; day++) {
-        const slotCell = document.createElement('div');
-        slotCell.className = 'relative border-b min-h-[10px]';
-        slotCell.dataset.slot = slot;
-        slotCell.dataset.day = day;
-        const inner = document.createElement('div');
-        inner.className = 'absolute inset-0';
-        slotCell.appendChild(inner);
-        grid.appendChild(slotCell);
-      }
+    // Build hourly rows (SCHEDULE_START_HOUR .. SCHEDULE_END_HOUR-1)
+    for (let hour = SCHEDULE_START_HOUR; hour < SCHEDULE_END_HOUR; hour++) {
+      const row = document.createElement('tr');
+      const hourLabel = `${(hour % 12 === 0) ? 12 : hour % 12}${hour >= 12 ? 'pm' : 'am'}`;
+      row.innerHTML = `
+        <td class="p-2 border dark:border-gray-600 font-medium text-gray-600 dark:text-gray-300 align-top">${hourLabel}</td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="0" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="1" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="2" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="3" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="4" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="5" data-hour="${hour}"></td>
+        <td class="p-2 border dark:border-gray-600 align-top" data-day="6" data-hour="${hour}"></td>
+      `;
+      body.appendChild(row);
     }
 
-    gridWrap.appendChild(grid);
-    scheduleContainer.appendChild(gridWrap);
+    // Clear TBA area and create placeholder
+    const tbaContainer = document.createElement('div');
+    tbaContainer.id = 'tba-courses';
+    tbaContainer.className = 'mt-6';
+    tbaContainer.innerHTML = `
+      <h3 class="text-lg font-medium mb-2">TBA / Unscheduled Courses</h3>
+      <div id="tba-list" class="space-y-2"></div>
+    `;
+    scheduleContainer.appendChild(tbaContainer);
 
-    const tbaWrap = document.createElement('div');
-    tbaWrap.id = 'tba-courses';
-    tbaWrap.className = 'mt-4';
-    tbaWrap.innerHTML = `<h3 class="text-lg font-medium mb-2">TBA / Unscheduled Courses</h3><div id="tba-list" class="space-y-2"></div>`;
-    scheduleContainer.appendChild(tbaWrap);
-
-    const backBtn = scheduleContainer.querySelector('#back-to-list');
-    if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
-  }
-
-  function minutesToSlotIndex(mins) {
-    return Math.floor((mins - SCHEDULE_START_HOUR * 60) / SLOT_MINUTES);
-  }
-
-  function buildSchedule(courses) {
-    createScheduleSkeleton();
-    const tbaListEl = scheduleContainer.querySelector('#tba-list');
-    const scheduleGrid = Array(5).fill(null).map(() => Array(SLOTS_PER_DAY).fill(null).map(() => []));
-    const sampleSlot = scheduleContainer.querySelector('[data-slot="0"][data-day="0"]');
-    const slotHeight = sampleSlot ? sampleSlot.getBoundingClientRect().height : 10;
-
+    // Place courses (one solid card at the course start hour cell for each day)
     courses.forEach(course => {
-      if (!course.schedule || !course.schedule.length) {
-        addCourseToTBA(course, tbaListEl);
+      if (!course.schedule || course.schedule.length === 0) {
+        addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
         return;
       }
-      let placedAny = false;
       course.schedule.forEach(s => {
         if (!s || !s.days || !s.time || /TBA|ARR|TBD/i.test(s.time) || /TBA|TBD|ARR/i.test(s.days)) {
+          addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
           return;
         }
         const days = parseDaysString(s.days);
         const timeRange = parseTimeStr(s.time);
-        if (!days.length || !timeRange) return;
-        const { start, end } = timeRange;
-        if (end <= SCHEDULE_START_HOUR * 60 || start >= SCHEDULE_END_HOUR * 60) return;
-        const clampedStart = Math.max(start, SCHEDULE_START_HOUR * 60);
-        const clampedEnd = Math.min(end, SCHEDULE_END_HOUR * 60);
-        const slotStart = minutesToSlotIndex(clampedStart);
-        const spanSlots = Math.max(1, Math.ceil((clampedEnd - clampedStart) / SLOT_MINUTES));
+        if (!days.length || !timeRange) {
+          addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
+          return;
+        }
+
+        const startHour = Math.floor(timeRange.start / 60);
+        // clamp start within schedule
+        const placeHour = Math.max(SCHEDULE_START_HOUR, Math.min(startHour, SCHEDULE_END_HOUR - 1));
 
         days.forEach(dayIndex => {
-          const targetCell = scheduleContainer.querySelector(`[data-slot="${slotStart}"][data-day="${dayIndex}"]`);
-          if (!targetCell) return;
+          const cell = body.querySelector(`[data-day="${dayIndex}"][data-hour="${placeHour}"]`);
+          if (!cell) return;
 
-          const inner = targetCell.firstElementChild;
-          const block = document.createElement('div');
-          const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-300';
-          block.className = `${colorClass} dark:bg-opacity-80 text-white rounded p-1 absolute left-1 right-1 overflow-hidden shadow cursor-pointer transition-all duration-200`;
-
-          const startOffsetMinutes = clampedStart - (SCHEDULE_START_HOUR * 60 + slotStart * SLOT_MINUTES);
-          const topPx = (startOffsetMinutes / SLOT_MINUTES) * slotHeight;
-          const heightPx = spanSlots * slotHeight - 2;
-          block.style.top = `${topPx}px`;
-          block.style.height = `${Math.max(10, heightPx)}px`;
-          block.style.zIndex = 20;
-
+          // create course card (solid, color-coded)
           const courseNumber = getCourseNumber(course);
-
+          const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-500';
+          const block = document.createElement('div');
+          block.className = `${colorClass} text-white rounded-lg p-2 shadow-md mb-2 cursor-pointer`;
+          block.setAttribute('data-crn', course.crn);
           block.innerHTML = `
-            <div class="text-[10px] font-semibold leading-tight whitespace-nowrap">${course.subjectCode} ${courseNumber}</div>
-            <div class="text-[9px] truncate">${course.courseName}</div>
+            <div class="font-semibold text-xs leading-tight">${course.subjectCode} ${courseNumber}</div>
+            <div class="text-[11px] truncate leading-tight">${course.courseName}</div>
+            <div class="text-[10px] opacity-90 mt-1">${s.time || 'TBA'} • ${s.where || 'TBA'}</div>
           `;
+
+          // basic conflict detection: if there is an existing card in the same cell, mark both
+          if (cell.querySelector('[data-crn]')) {
+            // mark existing and this as conflict
+            cell.querySelectorAll('[data-crn]').forEach(el => {
+              el.classList.add('ring-2', 'ring-red-400');
+              el.title = 'Time conflict!';
+            });
+            block.classList.add('ring-2', 'ring-red-400');
+            block.title = 'Time conflict!';
+          }
+
           block.addEventListener('click', (ev) => {
             ev.stopPropagation();
             fetchCourseDetails(termSelect ? termSelect.value : '', course.crn);
           });
 
-          let hasConflict = false;
-          for (let i = 0; i < spanSlots; i++) {
-            const currentSlot = slotStart + i;
-            if (currentSlot >= SLOTS_PER_DAY) continue;
-            if (scheduleGrid[dayIndex][currentSlot].length > 0) {
-              hasConflict = true;
-              scheduleGrid[dayIndex][currentSlot].forEach(conflictingBlock => {
-                conflictingBlock.classList.add('border-4', 'border-red-500');
-                conflictingBlock.title = 'Time conflict detected!';
-                conflictingBlock.style.zIndex = 30;
-              });
-            }
-          }
-
-          if (hasConflict) {
-            block.classList.add('border-4', 'border-red-500');
-            block.title = 'Time conflict detected!';
-            block.style.zIndex = 30;
-          }
-
-          for (let i = 0; i < spanSlots; i++) {
-            const currentSlot = slotStart + i;
-            if (currentSlot >= SLOTS_PER_DAY) continue;
-            scheduleGrid[dayIndex][currentSlot].push(block);
-          }
-
-          inner.appendChild(block);
-          placedAny = true;
+          cell.appendChild(block);
         });
       });
-
-      if (!placedAny) addCourseToTBA(course, tbaListEl);
     });
 
-    if (!tbaListEl.childElementCount) {
-      tbaListEl.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
+    // Show message when no TBA items
+    const tbaList = scheduleContainer.querySelector('#tba-list');
+    if (tbaList && !tbaList.childElementCount) {
+      tbaList.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
     }
+
+    // back button wiring
+    const backBtn = scheduleContainer.querySelector('#back-to-list');
+    if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
   }
 
   function addCourseToTBA(course, tbaListEl) {
+    if (!tbaListEl) return;
     const li = document.createElement('div');
     li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
     const courseNumber = getCourseNumber(course);
@@ -1029,13 +999,13 @@ document.addEventListener('DOMContentLoaded', () => {
     tbaListEl.appendChild(li);
   }
 
-  // Toggle schedule on/off 
+  // Toggle schedule on/off
   function toggleSchedule(show) {
     const filterControls = document.getElementById('filter-controls');
 
     if (show) {
       const bookmarkedCourses = bookmarks
-        .map(crn => allCourses.find(course => course.crn === crn))
+        .map(crn => allCourses.find(course => String(course.crn) === String(crn)))
         .filter(course => course);
 
       if (bookmarkedCourses.length === 0) {
