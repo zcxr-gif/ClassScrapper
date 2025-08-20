@@ -1,4 +1,10 @@
-// app.js (fixed + RateMyProfessors links + modern Monday-Sunday schedule)
+// app.js (updated)
+// - Minute-accurate, absolute-positioned schedule (Google Calendar style)
+// - Compact block contents (SUBJ NUM SEC + small bold time/location)
+// - Per-subject solid color blocks using subjectColorMap
+// - Adaptive text color based on computed background luminance
+// - Keeps the rest of your existing features (bookmarks, RMP links, modal, filters, etc.)
+
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -104,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     THE: 'Theatre', VIS: 'Visual Communications'
   };
 
+  // Tailwind class colors (used before) - still used where present
   const subjectColorMap = {
     ANT: 'bg-red-500', ARC: 'bg-green-500', ART: 'bg-blue-500', AIM: 'bg-yellow-500',
     AET: 'bg-lime-600', AVN: 'bg-purple-500', BIO: 'bg-pink-500', BUS: 'bg-indigo-600',
@@ -125,7 +132,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Schedule config ---
   const SCHEDULE_START_HOUR = 7; // 7 AM
   const SCHEDULE_END_HOUR = 22;  // 10 PM
-  const SLOT_MINUTES = 15;       // used for parsing, not visual rows
+  const SLOT_MINUTES = 15;       // parsing granularity (unused in display)
+  const HOUR_HEIGHT = 48;        // px per hour in the schedule column — lower = more compact
 
   // Schedule container added to body (hidden)
   const scheduleContainer = document.createElement('div');
@@ -845,7 +853,43 @@ document.addEventListener('DOMContentLoaded', () => {
     return { start, end };
   }
 
-  // --- Modern table-based schedule builder (Mon-Sun) ---
+  // -----------------------
+  // Helpers for color contrast
+  // -----------------------
+  // Given a tailwind background class (e.g., 'bg-indigo-500') create a temp element,
+  // measure computed background-color, compute luminance and return true if dark.
+  function isBgClassDark(bgClass) {
+    try {
+      const el = document.createElement('div');
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
+      el.style.visibility = 'hidden';
+      el.className = bgClass;
+      document.body.appendChild(el);
+      const cs = getComputedStyle(el).backgroundColor;
+      document.body.removeChild(el);
+      // cs is like 'rgb(r, g, b)' or 'rgba(...)'
+      const m = cs.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!m) return true; // fallback to dark
+      const r = parseInt(m[1], 10) / 255;
+      const g = parseInt(m[2], 10) / 255;
+      const b = parseInt(m[3], 10) / 255;
+      // sRGB to linear
+      const srgbToLin = v => (v <= 0.03928) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+      const L = 0.2126 * srgbToLin(r) + 0.7152 * srgbToLin(g) + 0.0722 * srgbToLin(b);
+      return L < 0.5; // dark if luminance less than 0.5
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function getTextColorClassForBg(bgClass) {
+    return isBgClassDark(bgClass) ? 'text-white' : 'text-gray-900';
+  }
+
+  // -----------------------
+  // NEW schedule builder (absolute-positioned blocks)
+  // -----------------------
   function buildSchedule(courses) {
     scheduleContainer.innerHTML = '';
 
@@ -859,49 +903,101 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     scheduleContainer.appendChild(header);
 
-    // Container & table
-    const tableWrap = document.createElement('div');
-    tableWrap.className = 'overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg';
-    const table = document.createElement('table');
-    table.className = 'w-full border-collapse text-sm min-w-[800px]';
-    table.innerHTML = `
-      <thead class="bg-gray-100 dark:bg-gray-700">
-        <tr>
-          <th class="p-2 border dark:border-gray-600 text-left w-20">Time</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Monday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Tuesday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Wednesday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Thursday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Friday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Saturday</th>
-          <th class="p-2 border dark:border-gray-600 text-center">Sunday</th>
-        </tr>
-      </thead>
-      <tbody id="schedule-body"></tbody>
-    `;
-    tableWrap.appendChild(table);
-    scheduleContainer.appendChild(tableWrap);
+    // grid wrapper: left column hours, right 7 day columns
+    const gridWrap = document.createElement('div');
+    gridWrap.className = 'w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden';
+    gridWrap.style.display = 'flex';
+    gridWrap.style.gap = '0';
+    gridWrap.style.padding = '0';
+    gridWrap.style.alignItems = 'stretch';
 
-    const body = table.querySelector('#schedule-body');
+    // left column: hours labels
+    const hoursCol = document.createElement('div');
+    hoursCol.className = 'p-2 border-r dark:border-gray-700';
+    hoursCol.style.width = '74px';
+    hoursCol.style.boxSizing = 'border-box';
 
-    // Build hourly rows (SCHEDULE_START_HOUR .. SCHEDULE_END_HOUR-1)
-    for (let hour = SCHEDULE_START_HOUR; hour < SCHEDULE_END_HOUR; hour++) {
-      const row = document.createElement('tr');
-      const hourLabel = `${(hour % 12 === 0) ? 12 : hour % 12}${hour >= 12 ? 'pm' : 'am'}`;
-      row.innerHTML = `
-        <td class="p-2 border dark:border-gray-600 font-medium text-gray-600 dark:text-gray-300 align-top">${hourLabel}</td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="0" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="1" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="2" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="3" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="4" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="5" data-hour="${hour}"></td>
-        <td class="p-2 border dark:border-gray-600 align-top" data-day="6" data-hour="${hour}"></td>
-      `;
-      body.appendChild(row);
+    const hoursContainer = document.createElement('div');
+    hoursContainer.style.position = 'relative';
+    const totalHours = SCHEDULE_END_HOUR - SCHEDULE_START_HOUR;
+    const containerHeight = totalHours * HOUR_HEIGHT;
+    hoursContainer.style.height = `${containerHeight}px`;
+    hoursContainer.style.minHeight = `${containerHeight}px`;
+
+    for (let h = SCHEDULE_START_HOUR; h < SCHEDULE_END_HOUR; h++) {
+      const hourDiv = document.createElement('div');
+      hourDiv.style.height = `${HOUR_HEIGHT}px`;
+      hourDiv.style.lineHeight = `${HOUR_HEIGHT}px`;
+      hourDiv.style.boxSizing = 'border-box';
+      hourDiv.className = 'text-xs text-gray-600 dark:text-gray-300 font-medium';
+      const hourLabel = `${(h % 12 === 0) ? 12 : h % 12}${h >= 12 ? 'pm' : 'am'}`;
+      hourDiv.textContent = hourLabel;
+      hoursContainer.appendChild(hourDiv);
+    }
+    hoursCol.appendChild(hoursContainer);
+
+    // right: days columns
+    const daysCols = document.createElement('div');
+    daysCols.style.flex = '1';
+    daysCols.style.display = 'flex';
+    daysCols.style.height = `${containerHeight}px`;
+    daysCols.style.minHeight = `${containerHeight}px`;
+    daysCols.style.boxSizing = 'border-box';
+    daysCols.className = 'relative';
+
+    const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+    // header row for day names above the columns
+    const dayHeader = document.createElement('div');
+    dayHeader.style.display = 'flex';
+    dayHeader.className = 'mb-2';
+    dayHeader.innerHTML = `<div style="width:74px"></div>`; // spacer for left hour column
+    const dayHeaderCols = document.createElement('div');
+    dayHeaderCols.style.display = 'flex';
+    dayHeaderCols.style.flex = '1';
+    dayHeaderCols.style.gap = '0';
+    dayNames.forEach(dn => {
+      const dh = document.createElement('div');
+      dh.className = 'text-sm font-semibold text-center text-gray-700 dark:text-gray-200 p-2';
+      dh.style.flex = '1';
+      dh.textContent = dn;
+      dayHeaderCols.appendChild(dh);
+    });
+    dayHeader.appendChild(dayHeaderCols);
+    scheduleContainer.appendChild(dayHeader);
+
+    // create each day column (relative container)
+    const dayColumns = [];
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const col = document.createElement('div');
+      col.style.flex = '1';
+      col.style.position = 'relative';
+      col.style.height = `${containerHeight}px`;
+      col.style.boxSizing = 'border-box';
+      col.style.borderLeft = '1px solid';
+      col.style.borderLeftColor = 'transparent';
+      col.className = 'px-1';
+      // create faint hour separators
+      for (let h = 0; h < totalHours; h++) {
+        const sep = document.createElement('div');
+        sep.style.position = 'absolute';
+        sep.style.left = '0';
+        sep.style.right = '0';
+        sep.style.height = '1px';
+        sep.style.top = `${h * HOUR_HEIGHT}px`;
+        sep.style.backgroundColor = 'var(--tw-border-opacity, rgba(0,0,0,0.04))';
+        sep.className = 'dark:bg-gray-700';
+        col.appendChild(sep);
+      }
+      dayColumns.push(col);
+      daysCols.appendChild(col);
     }
 
-    // Clear TBA area and create placeholder
+    gridWrap.appendChild(hoursCol);
+    gridWrap.appendChild(daysCols);
+    scheduleContainer.appendChild(gridWrap);
+
+    // TBA area
     const tbaContainer = document.createElement('div');
     tbaContainer.id = 'tba-courses';
     tbaContainer.className = 'mt-6';
@@ -911,12 +1007,24 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     scheduleContainer.appendChild(tbaContainer);
 
-    // Place courses (one solid card at the course start hour cell for each day)
+    // Helper to compute top/height px
+    function minutesToTopPx(min) {
+      return ((min - (SCHEDULE_START_HOUR * 60)) / 60) * HOUR_HEIGHT;
+    }
+    function minutesToHeightPx(mins) {
+      return (mins / 60) * HOUR_HEIGHT;
+    }
+
+    // Track placed ranges per day for conflict detection
+    const placedRanges = Array.from({length:7}, () => []);
+
+    // Place courses
     courses.forEach(course => {
       if (!course.schedule || course.schedule.length === 0) {
         addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
         return;
       }
+
       course.schedule.forEach(s => {
         if (!s || !s.days || !s.time || /TBA|ARR|TBD/i.test(s.time) || /TBA|TBD|ARR/i.test(s.days)) {
           addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
@@ -929,56 +1037,103 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        const startHour = Math.floor(timeRange.start / 60);
-        // clamp start within schedule
-        const placeHour = Math.max(SCHEDULE_START_HOUR, Math.min(startHour, SCHEDULE_END_HOUR - 1));
+        const startMin = timeRange.start;
+        const endMin = timeRange.end;
+        const durationMin = Math.max(5, endMin - startMin); // min height
 
         days.forEach(dayIndex => {
-          const cell = body.querySelector(`[data-day="${dayIndex}"][data-hour="${placeHour}"]`);
-          if (!cell) return;
+          // skip if event outside schedule bounds
+          if (endMin <= SCHEDULE_START_HOUR * 60 || startMin >= SCHEDULE_END_HOUR * 60) {
+            addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
+            return;
+          }
 
-          // create course card (solid, color-coded)
+          const top = Math.max(0, minutesToTopPx(startMin));
+          const bottomLimit = totalHours * HOUR_HEIGHT;
+          const height = Math.max(16, minutesToHeightPx(durationMin));
+          const boundedHeight = Math.min(height, bottomLimit - top);
+
+          const col = dayColumns[dayIndex];
+          if (!col) return;
+
           const courseNumber = getCourseNumber(course);
-          const colorClass = subjectColorMap[course.subjectCode] || 'bg-gray-500';
-          const block = document.createElement('div');
-          block.className = `${colorClass} text-white rounded-lg p-2 shadow-md mb-2 cursor-pointer`;
-          block.setAttribute('data-crn', course.crn);
-          block.innerHTML = `
-            <div class="font-semibold text-xs leading-tight">${course.subjectCode} ${courseNumber}</div>
-            <div class="text-[11px] truncate leading-tight">${course.courseName}</div>
-            <div class="text-[10px] opacity-90 mt-1">${s.time || 'TBA'} • ${s.where || 'TBA'}</div>
-          `;
+          const section = course.section ? String(course.section) : '';
+          const subj = course.subjectCode || '';
+          const colorClass = subjectColorMap[subj] || 'bg-gray-500';
+          const textColorClass = getTextColorClassForBg(colorClass);
 
-          // basic conflict detection: if there is an existing card in the same cell, mark both
-          if (cell.querySelector('[data-crn]')) {
-            // mark existing and this as conflict
-            cell.querySelectorAll('[data-crn]').forEach(el => {
-              el.classList.add('ring-2', 'ring-red-400');
-              el.title = 'Time conflict!';
-            });
+          const block = document.createElement('div');
+          block.className = `${colorClass} ${textColorClass} rounded-md p-1.5 shadow-md absolute cursor-pointer`;
+          block.style.left = '6px';
+          block.style.right = '6px';
+          block.style.top = `${top}px`;
+          block.style.height = `${boundedHeight}px`;
+          block.style.overflow = 'hidden';
+          block.style.boxSizing = 'border-box';
+          block.style.display = 'flex';
+          block.style.flexDirection = 'column';
+          block.style.justifyContent = 'center';
+          block.style.gap = '2px';
+          block.style.fontSize = '12px';
+          block.style.padding = '6px 6px';
+          block.setAttribute('data-crn', course.crn);
+
+          // compact content: first line SUBJECT NUM SEC, second line time • where (small bold)
+          const firstLine = document.createElement('div');
+          firstLine.className = 'font-bold text-sm leading-tight truncate';
+          firstLine.textContent = `${subj} ${courseNumber} ${section}`.trim();
+
+          const secondLine = document.createElement('div');
+          secondLine.className = 'text-[11px] font-semibold leading-tight truncate';
+          const whenWhere = `${s.time || 'TBA'} • ${s.where || 'TBA'}`;
+          secondLine.textContent = whenWhere;
+
+          block.appendChild(firstLine);
+          block.appendChild(secondLine);
+
+          // if block is too short, reduce font size
+          const minForTwoLines = 30;
+          if (boundedHeight < minForTwoLines) {
+            firstLine.style.fontSize = '11px';
+            secondLine.style.display = 'none';
+          }
+
+          // conflict detection: compare with placedRanges[dayIndex]
+          const overlapping = placedRanges[dayIndex].some(r => !(endMin <= r.start || startMin >= r.end));
+          if (overlapping) {
             block.classList.add('ring-2', 'ring-red-400');
             block.title = 'Time conflict!';
+            // mark existing that overlap as well
+            placedRanges[dayIndex].forEach(r => {
+              if (!(endMin <= r.start || startMin >= r.end) && r.el) {
+                r.el.classList.add('ring-2', 'ring-red-400');
+                r.el.title = 'Time conflict!';
+              }
+            });
           }
+
+          // store placed range for this day
+          placedRanges[dayIndex].push({ start: startMin, end: endMin, el: block });
 
           block.addEventListener('click', (ev) => {
             ev.stopPropagation();
             fetchCourseDetails(termSelect ? termSelect.value : '', course.crn);
           });
 
-          cell.appendChild(block);
+          col.appendChild(block);
         });
       });
     });
 
-    // Show message when no TBA items
+    // back button wiring
+    const backBtn = scheduleContainer.querySelector('#back-to-list');
+    if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
+
+    // If no TBA items
     const tbaList = scheduleContainer.querySelector('#tba-list');
     if (tbaList && !tbaList.childElementCount) {
       tbaList.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
     }
-
-    // back button wiring
-    const backBtn = scheduleContainer.querySelector('#back-to-list');
-    if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
   }
 
   function addCourseToTBA(course, tbaListEl) {
