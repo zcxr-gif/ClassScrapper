@@ -249,6 +249,147 @@ async function fetchCourseDetails(termCode, crn) {
   return details;
 }
 
+// --- Fetch Catalog Entry (improved, tailored to Farmingdale's markup) ---
+async function fetchCatalogEntry(termCode, subject, courseNumber) {
+  const cacheKey = `catalog_${termCode}_${subject}_${courseNumber}`;
+  try {
+    // try cache first
+    const cached = await getFromCache(db, cacheKey);
+    if (cached) return cached;
+
+    const jar = new CookieJar();
+    const client = wrapper(axios.create({ jar }));
+    // Prime session (same pattern used across this file)
+    await client.get("https://oasis.farmingdale.edu/pls/prod/bwckschd.p_disp_dyn_sched");
+
+    const url = `https://oasis.farmingdale.edu/pls/prod/bwckctlg.p_display_courses?term_in=${encodeURIComponent(termCode)}&one_subj=${encodeURIComponent(subject)}&sel_crse_strt=${encodeURIComponent(courseNumber)}&sel_crse_end=${encodeURIComponent(courseNumber)}&sel_subj=&sel_levl=&sel_schd=&sel_coll=&sel_divs=&sel_dept=&sel_attr=`;
+    const res = await client.get(url);
+    const $ = load(res.data);
+
+    const entries = [];
+
+    // Each catalog entry on the page: td.nttitle (title link) followed by td.ntdefault (content)
+    $('td.nttitle a').each((i, el) => {
+      try {
+        const title = $(el).text().trim(); // e.g. "CHM 124L - Principles of Chemistry (Lab)"
+        const detailsTd = $(el).closest('tr').next().find('td.ntdefault');
+
+        // Raw HTML and cleaned text for different parsing strategies
+        const rawHtml = detailsTd.html() || '';
+        const rawText = detailsTd.text().replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
+
+        // Extract description: everything up to the first label like "Prerequisite(s):" or "Corequisite(s):" or "0.000 Credit"
+        let description = rawText;
+        const descCutters = [/Prerequisite[s]?:/i, /Corequisite[s]?:/i, /Schedule Types:/i, /Course Attributes:/i, /\d+\.\d+\s+Credit/i, /\d+\.\d+\s+Lab/i];
+        for (const rx of descCutters) {
+          const m = rawText.search(rx);
+          if (m !== -1) {
+            description = rawText.slice(0, m).trim();
+            break;
+          }
+        }
+
+        // Prereqs / Coreqs
+        const prereqMatch = rawText.match(/Prerequisite[s]?:\s*(.+?)(?:\n|$)/i);
+        const coreqMatch = rawText.match(/Corequisite[s]?:\s*(.+?)(?:\n|$)/i);
+
+        // Credits & lab hours (may appear as lines like "0.000 Credit hours" or "3.000   Lab hours")
+        const credits = {};
+        const creditMatches = [...rawText.matchAll(/(\d+\.\d+)\s+(Credit|Lab)[^\n]*/ig)];
+        for (const cm of creditMatches) {
+          const val = cm[1];
+          const kind = cm[2].toLowerCase();
+          if (kind.startsWith('credit')) credits.creditHours = parseFloat(val);
+          else if (kind.startsWith('lab')) credits.labHours = parseFloat(val);
+          else {
+            // fallback to storing by raw kind
+            credits[kind] = parseFloat(val);
+          }
+        }
+
+        // Schedule Types (the page places them after a <SPAN class="fieldlabeltext">Schedule Types:</SPAN>)
+        let scheduleTypes = null;
+        // Try to parse them from the HTML (keeps links / text intact)
+        const schedSpan = detailsTd.find('span.fieldlabeltext').filter((i, s) => $(s).text().trim().startsWith('Schedule Types'));
+        if (schedSpan.length) {
+          // schedule types appear immediately after the span, sometimes as links + text separated by commas
+          const after = schedSpan.closest('td').html().split($(schedSpan).parent().html())[1] || '';
+          // fallback: text extraction with the "Schedule Types:" prefix
+          const schedText = rawText.match(/Schedule Types:\s*(.+?)(?:\n|$)/i);
+          if (schedText) scheduleTypes = schedText[1].split(',').map(s => s.trim()).filter(Boolean);
+        } else {
+          const schedText = rawText.match(/Schedule Types:\s*(.+?)(?:\n|$)/i);
+          if (schedText) scheduleTypes = schedText[1].split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        // Course Attributes
+        const attrsMatch = rawText.match(/Course Attributes?:\s*(.+?)(?:\n|$)/i);
+        const attributes = attrsMatch ? attrsMatch[1].split(',').map(s => s.trim()).filter(Boolean) : null;
+
+        // Department: lines like "Chemistry Department"
+        const deptMatch = rawText.match(/^(.+Department)\s*$/im);
+        const department = deptMatch ? deptMatch[1].trim() : null;
+
+        entries.push({
+          title,
+          description,
+          prerequisites: prereqMatch ? prereqMatch[1].trim() : null,
+          corequisites: coreqMatch ? coreqMatch[1].trim() : null,
+          credits: Object.keys(credits).length ? credits : null,
+          scheduleTypes,
+          attributes,
+          department,
+          rawText,
+          rawHtml
+        });
+      } catch (e) {
+        console.error('Error parsing a catalog entry block:', e.message);
+      }
+    });
+
+    // If nothing was parsed, fallback to returning whole page text
+    if (entries.length === 0) {
+      const whole = $('body').text().trim();
+      entries.push({
+        title: `${subject} ${courseNumber} (catalog fallback)`,
+        description: whole.slice(0, 4000),
+        prerequisites: null,
+        corequisites: null,
+        credits: null,
+        scheduleTypes: null,
+        attributes: null,
+        department: null,
+        rawText: whole,
+        rawHtml: $('body').html() || ''
+      });
+    }
+
+    // cache and return
+    await saveToCache(db, cacheKey, entries);
+    return entries;
+  } catch (err) {
+    console.error('Failed to fetch catalog entry:', err.message);
+    throw err;
+  }
+}
+
+// --- Catalog endpoint ---
+app.get('/catalog/:term/:subject/:course', async (req, res) => {
+  try {
+    const { term, subject, course } = req.params;
+    if (!term || !/^\d{6}$/.test(term) || !subject || !course) {
+      return res.status(400).json({ error: 'Invalid parameters' });
+    }
+    const subjectCode = subject.toUpperCase();
+    const catalog = await fetchCatalogEntry(term, subjectCode, course);
+    res.json({ count: catalog.length, entries: catalog, source: 'live' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch catalog entry' });
+  }
+});
+
+
 // --- API Endpoints ---
 app.get("/terms", async (req, res) => {
   const cacheKey = "all_terms_with_subjects";

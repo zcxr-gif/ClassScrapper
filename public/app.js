@@ -564,26 +564,83 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Modal ---
+ // --- Modal ---
   function fetchCourseDetails(term, crn) {
     if (!modalBody || !modal) return;
     modalBody.innerHTML = '<div class="text-center py-6">Loading...</div>';
     modalTitle.textContent = '';
     modal.classList.remove('hidden');
-    fetch(`/course-details/${term}/${crn}`)
-      .then(res => res.json())
-      .then(displayCourseDetails)
+
+    // Find the full course object from our local list to get its subject and number
+    const course = allCourses.find(c => String(c.crn) === String(crn));
+    if (!course) {
+        modalBody.innerHTML = '<p class="text-red-600">Could not find course data to fetch details.</p>';
+        return;
+    }
+    const courseNumber = getCourseNumber(course);
+    
+    // --- Create two promises: one for seat details, one for catalog entry ---
+    const detailsPromise = fetch(`/course-details/${term}/${crn}`).then(res => {
+        if (!res.ok) return {}; // Return empty object on failure to not break Promise.all
+        return res.json();
+    });
+
+    const catalogPromise = fetch(`/catalog/${term}/${course.subjectCode}/${courseNumber}`).then(res => {
+        if (!res.ok) return { entries: [] }; // Return empty structure on failure
+        return res.json();
+    });
+
+    // --- Wait for both promises to resolve ---
+    Promise.all([detailsPromise, catalogPromise])
+      .then(([details, catalogData]) => {
+        // Pass BOTH results to the display function
+        displayCourseDetails(details, catalogData);
+      })
       .catch(() => {
-        modalBody.innerHTML = '<p class="text-red-600">Error loading details.</p>';
+        modalBody.innerHTML = '<p class="text-red-600">Error loading course details.</p>';
       });
   }
-  function displayCourseDetails(details) {
+  ffunction displayCourseDetails(details, catalogData) {
     modalTitle.textContent = details.title || details.courseName || 'Course Details';
+
+    // --- 1. Build the new Catalog Details section ---
+    let catalogHtml = '';
+    const catalogEntry = catalogData?.entries?.[0]; // Get the first entry from the catalog data
+
+    if (catalogEntry) {
+        catalogHtml = `
+        <div class="mb-4 p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg space-y-3">
+            ${catalogEntry.description ? `
+            <div>
+                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Description</h4>
+                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.description}</p>
+            </div>` : ''}
+            
+            ${catalogEntry.prerequisites ? `
+            <div>
+                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Prerequisites</h4>
+                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.prerequisites}</p>
+            </div>` : ''}
+
+            ${catalogEntry.corequisites ? `
+            <div>
+                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Corequisites</h4>
+                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.corequisites}</p>
+            </div>` : ''}
+        </div>
+        `;
+    }
+
+    // --- 2. Build the existing details sections (seats, instructor, etc.) ---
     const instructorDisplay = extractInstructorFrom(details) || 'TBA';
     const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
     const rmpLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg inline-block ml-2">⭐ Rate Instructor</a>` : '';
     const seats = details.seats?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg"><p class="font-semibold">Seats</p><p>Total: ${details.seats.capacity}</p><p>Taken: ${details.seats.actual}</p><p>Remaining: ${details.seats.remaining}</p></div>` : '<p>Seats info not available</p>';
     const waitlist = details.waitlist?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg"><p class="font-semibold">Waitlist</p><p>Total: ${details.waitlist.capacity}</p><p>Taken: ${details.waitlist.actual}</p><p>Remaining: ${details.waitlist.remaining}</p></div>` : '<p>Waitlist info not available</p>';
+    
+    // --- 3. Combine everything into the final modal body ---
     modalBody.innerHTML = `
+      ${catalogHtml} 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <p><span class="font-semibold">Term:</span> ${details.associatedTerm || 'N/A'}</p>
@@ -599,14 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
   }
-  const closeModal = () => modal.classList.add('hidden');
-  if (modal) {
-    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-    const closeBtn = modal.querySelector('.close-button');
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-  }
-  window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) closeModal(); });
-
+			
   // --- Options panel list populate ---
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
