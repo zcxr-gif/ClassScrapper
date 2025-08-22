@@ -1071,6 +1071,9 @@ days.forEach(dayIndex => {
   col.appendChild(block);
 });
 
+  }); 
+}); 
+
 
     const backBtn = scheduleContainer.querySelector('#back-to-list');
     if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
