@@ -709,24 +709,69 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Time/day parsing helpers ---
-  function parseDaysString(daysStr) {
-    if (!daysStr) return [];
-    const s = daysStr.toString().toUpperCase().replace(/\s+/g, '');
-    const days = new Set();
-    if (s.includes('MON')) days.add(0);
-    if (s.includes('TUE')) days.add(1);
-    if (s.includes('WED')) days.add(2);
-    if (s.includes('THU')) days.add(3);
-    if (s.includes('FRI')) days.add(4);
-    if (s.includes('SAT')) days.add(5);
-    if (s.includes('SUN')) days.add(6);
-    if (s.includes('M') && !s.includes('MON')) days.add(0);
-    if (s.includes('TR') || (s.includes('TH') && !s.includes('THU'))) days.add(3);
-    if (s.includes('T') && !s.includes('TUE') && !s.includes('TH') && !s.includes('TR')) days.add(1);
-    if (s.includes('W') && !s.includes('WED')) days.add(2);
-    if (s.includes('F') && !s.includes('FRI')) days.add(4);
-    return Array.from(days).sort((a, b) => a - b);
+function parseDaysString(daysStr) {
+  if (!daysStr) return [];
+
+  let raw = String(daysStr).toUpperCase().trim();
+
+  // quick rejects
+  if (/TBA|ARR|TBD/.test(raw)) return [];
+
+  // normalize common full-names -> 3-letter
+  raw = raw
+    .replace(/MONDAY|MON/g, 'MON')
+    .replace(/TUESDAY|TUES|TUE/g, 'TUE')
+    .replace(/WEDNESDAY|WEDS|WED/g, 'WED')
+    .replace(/THURSDAY|THURS|THU|TH/g, 'THU')
+    .replace(/FRIDAY|FRI/g, 'FRI')
+    .replace(/SATURDAY|SAT/g, 'SAT')
+    .replace(/SUNDAY|SUN/g, 'SUN');
+
+  // If the string contains separators (space, comma, slash, dash, dot), remember that:
+  const hasSeparator = /[\s,\/\-\.]/.test(raw);
+
+  // Compact-only-letters version (remove separators) to detect concatenated single-letter sequences
+  const compact = raw.replace(/[\s,\/\-\.]/g, '');
+
+  // weekday order & maps
+  const orderSingle = ['M','T','W','R','F','S','U']; // U for Sunday (single-letter choice)
+  const threeToIndex = { MON:0, TUE:1, WED:2, THU:3, FRI:4, SAT:5, SUN:6 };
+  const singleToIndex = { M:0, T:1, W:2, R:3, F:4, S:5, U:6 };
+
+  // If there are only compact single-letter tokens AND there were NO separators in original string,
+  // treat it as a range from first to last letter (inclusive).
+  if (!hasSeparator && /^[MTWRFSU]+$/.test(compact) && compact.length > 1) {
+    const first = compact[0];
+    const last = compact[compact.length - 1];
+    const start = orderSingle.indexOf(first);
+    const end = orderSingle.indexOf(last);
+    if (start === -1 || end === -1) return [];
+
+    const res = [];
+    if (start <= end) {
+      for (let i = start; i <= end; i++) res.push(i);
+    } else {
+      // If first is after last in week order, wrap around (rare, but supported)
+      for (let i = start; i < 7; i++) res.push(i);
+      for (let i = 0; i <= end; i++) res.push(i);
+    }
+    return Array.from(new Set(res)).sort((a, b) => a - b);
   }
+
+  // Otherwise, extract any recognizable tokens (3-letter names or single-letter tokens)
+  const tokenRegex = /(MON|TUE|WED|THU|FRI|SAT|SUN|M|T|W|R|F|S|U)/g;
+  const matches = raw.match(tokenRegex);
+  if (!matches || matches.length === 0) return [];
+
+  const set = new Set();
+  for (const tok of matches) {
+    if (threeToIndex.hasOwnProperty(tok)) set.add(threeToIndex[tok]);
+    else if (singleToIndex.hasOwnProperty(tok)) set.add(singleToIndex[tok]);
+  }
+
+  return Array.from(set).sort((a, b) => a - b);
+}
+
 
   function parseTimeStr(timeStr) {
     if (!timeStr || /TBA|ARR|TBD/i.test(timeStr)) return null;
@@ -927,97 +972,105 @@ document.addEventListener('DOMContentLoaded', () => {
         const endMin = timeRange.end;
         const durationMin = Math.max(5, endMin - startMin);
 
-        days.forEach(dayIndex => {
-          if (endMin <= SCHEDULE_START_HOUR * 60 || startMin >= SCHEDULE_END_HOUR * 60) {
-            addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
-            return;
-          }
+        // --- replace the existing days.forEach(dayIndex => { ... }) body with this ---
+days.forEach(dayIndex => {
+  // If time is outside schedule bounds -> mark TBA
+  if (endMin <= SCHEDULE_START_HOUR * 60 || startMin >= SCHEDULE_END_HOUR * 60) {
+    addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
+    return;
+  }
 
-          const top = Math.max(0, minutesToTopPx(startMin));
-          const bottomLimit = (SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * HOUR_HEIGHT;
-          const height = Math.max(16, minutesToHeightPx(durationMin));
-          const boundedHeight = Math.min(height, bottomLimit - top);
+  const top = Math.max(0, minutesToTopPx(startMin));
+  const bottomLimit = (SCHEDULE_END_HOUR - SCHEDULE_START_HOUR) * HOUR_HEIGHT;
+  const height = Math.max(16, minutesToHeightPx(durationMin));
+  const boundedHeight = Math.min(height, bottomLimit - top);
 
-          const col = dayColumns[dayIndex];
-          if (!col) return;
+  const col = dayColumns[dayIndex];
+  if (!col) return;
 
-          const courseNumber = getCourseNumber(course);
-          const section = course.section ? String(course.section) : '';
-          
-          const rawSubj = course.subjectCode || '';
-          const subj = rawSubj.split(' ')[0];
+  const courseNumber = getCourseNumber(course);
+  const section = course.section ? String(course.section) : '';
 
-          const hex = subjectHexMap[subj] || '#6b7280';
-          const textColor = textColorForHex(hex);
+  const rawSubj = course.subjectCode || '';
+  const subj = rawSubj.split(' ')[0];
 
-          const block = document.createElement('div');
-          block.style.backgroundColor = hex;
-          block.style.color = textColor;
-          block.className = 'rounded-md p-1.5 shadow-md absolute cursor-pointer';
-          block.style.left = '6px';
-          block.style.right = '6px';
-          block.style.top = `${top}px`;
-          block.style.height = `${boundedHeight}px`;
-          block.style.overflow = 'hidden';
-          block.style.boxSizing = 'border-box';
-          block.style.display = 'flex';
-          block.style.flexDirection = 'column';
-          block.style.justifyContent = 'center';
-          block.style.gap = '2px';
-          block.style.fontSize = '12px';
-          block.style.padding = '6px 6px';
-          block.setAttribute('data-crn', course.crn);
+  const hex = subjectHexMap[subj] || '#6b7280';
+  const textColor = textColorForHex(hex);
 
-          const firstLine = document.createElement('div');
-          firstLine.className = 'font-bold text-sm leading-tight truncate';
-          firstLine.textContent = `${subj} ${courseNumber} ${section}`.trim();
+  // create a fresh block element for this specific day (important!)
+  const block = document.createElement('div');
+  block.style.backgroundColor = hex;
+  block.style.color = textColor;
+  block.className = 'rounded-md p-1.5 shadow-md absolute cursor-pointer';
+  block.style.left = '6px';
+  block.style.right = '6px';
+  block.style.top = `${top}px`;
+  block.style.height = `${boundedHeight}px`;
+  block.style.overflow = 'hidden';
+  block.style.boxSizing = 'border-box';
+  block.style.display = 'flex';
+  block.style.flexDirection = 'column';
+  block.style.justifyContent = 'center';
+  block.style.gap = '2px';
+  block.style.fontSize = '12px';
+  block.style.padding = '6px 6px';
+  block.setAttribute('data-crn', course.crn);
+  block.setAttribute('data-day-index', String(dayIndex));
 
-          const secondLine = document.createElement('div');
-          secondLine.className = 'text-[11px] font-semibold leading-tight truncate';
-          secondLine.textContent = `${s.time || 'TBA'}`;
+  // text lines: class (first), time (second), where (third)
+  const firstLine = document.createElement('div');
+  firstLine.className = 'font-bold text-sm leading-tight truncate';
+  firstLine.textContent = `${subj} ${courseNumber} ${section}`.trim();
 
-          const thirdLine = document.createElement('div');
-          thirdLine.className = 'text-[11px] leading-tight truncate';
-          thirdLine.textContent = `${s.where || 'TBA'}`;
+  const secondLine = document.createElement('div');
+  secondLine.className = 'text-[11px] font-semibold leading-tight truncate';
+  secondLine.textContent = `${s.time || 'TBA'}`;
 
-          block.appendChild(firstLine);
-          block.appendChild(secondLine);
-          block.appendChild(thirdLine);
+  const thirdLine = document.createElement('div');
+  thirdLine.className = 'text-[11px] leading-tight truncate';
+  thirdLine.textContent = `${s.where || 'TBA'}`;
 
-          const minForThreeLines = 36;
-          if (boundedHeight < minForThreeLines) {
-            thirdLine.style.display = 'none';
-            if (boundedHeight < 24) {
-                secondLine.style.display = 'none';
-                firstLine.style.fontSize = '10px';
-                firstLine.style.lineHeight = '1.1';
-                block.style.padding = '3px 6px';
-            }
-          }
+  block.appendChild(firstLine);
+  block.appendChild(secondLine);
+  block.appendChild(thirdLine);
 
-          const overlapping = placedRanges[dayIndex].some(r => !(endMin <= r.start || startMin >= r.end));
-          if (overlapping) {
-            block.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)';
-            block.title = 'Time conflict!';
-            placedRanges[dayIndex].forEach(r => {
-              if (!(endMin <= r.start || startMin >= r.end) && r.el) {
-                r.el.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)';
-                r.el.title = 'Time conflict!';
-              }
-            });
-          }
+  // collapse text when block gets small
+  const minForThreeLines = 36;
+  if (boundedHeight < minForThreeLines) {
+    thirdLine.style.display = 'none';
+    if (boundedHeight < 24) {
+      secondLine.style.display = 'none';
+      firstLine.style.fontSize = '10px';
+      firstLine.style.lineHeight = '1.1';
+      block.style.padding = '3px 6px';
+    }
+  }
 
-          placedRanges[dayIndex].push({ start: startMin, end: endMin, el: block });
-
-          block.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            fetchCourseDetails(termSelect ? termSelect.value : '', course.crn);
-          });
-
-          col.appendChild(block);
-        });
-      });
+  // conflict check for this specific day
+  const overlapping = placedRanges[dayIndex].some(r => !(endMin <= r.start || startMin >= r.end));
+  if (overlapping) {
+    block.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)';
+    block.title = 'Time conflict!';
+    placedRanges[dayIndex].forEach(r => {
+      if (!(endMin <= r.start || startMin >= r.end) && r.el) {
+        r.el.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)';
+      }
     });
+  }
+
+  // remember this block for this day so future conflicts can highlight it
+  placedRanges[dayIndex].push({ start: startMin, end: endMin, el: block });
+
+  // click -> fetch details
+  block.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    fetchCourseDetails(termSelect ? termSelect.value : '', course.crn);
+  });
+
+  // finally add this day's block to the column
+  col.appendChild(block);
+});
+
 
     const backBtn = scheduleContainer.querySelector('#back-to-list');
     if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
