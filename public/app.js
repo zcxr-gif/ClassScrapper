@@ -74,6 +74,11 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       optionsPanel.classList.remove('-translate-x-full');
       if (menuDropdown) menuDropdown.classList.add('hidden');
+      
+      // ADDED: Default to showing bookmarks when the panel opens
+      populateOptionsList(bookmarkedCourses, 'bookmark');
+      // ADDED: Set the "Bookmarks" tab to be visually active
+      setActiveOptionsTab('bookmarks');
     });
   }
   closeOptionsBtn.addEventListener('click', () => optionsPanel.classList.add('-translate-x-full'));
@@ -82,6 +87,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isClickInsideOptions) optionsPanel.classList.add('-translate-x-full');
     if (menuToggleBtn && !menuToggleBtn.contains(e.target) && menuDropdown) menuDropdown.classList.add('hidden');
   });
+  
+  const clearFiltersBtn = document.getElementById('clear-filters-btn');
+clearFiltersBtn.addEventListener('click', () => {
+  searchInput.value = '';
+  sortSelect.value = '';
+  typeFilter.value = '';
+  levelFilter.value = '';
+  availabilityFilter.value = '';
+  applyFilters();
+});
 
   // --- Data ---
   let termsData = [];
@@ -750,6 +765,7 @@ function displayCourseDetails(details) {
 
 			
   // --- Options panel list populate ---
+  // --- Options panel list populate ---
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
     if (list.length === 0) {
@@ -795,19 +811,59 @@ function displayCourseDetails(details) {
         if (type === 'bookmark') {
             bookmarkedCourses = bookmarkedCourses.filter(c => String(c.crn) !== crn);
             localStorage.setItem('bookmarkedCourses', JSON.stringify(bookmarkedCourses));
+            
+            // --- FIXED ---
+            // Find and update the button on the main course card
+            const mainButton = document.querySelector(`.bookmark-btn[data-crn="${crn}"]`);
+            if (mainButton) {
+                mainButton.innerText = '☆';
+                mainButton.classList.remove('bg-yellow-500');
+                mainButton.classList.add('bg-gray-400');
+            }
+            // If the schedule is visible, rebuild it to reflect the removal
+            if (!scheduleContainer.classList.contains('hidden')) {
+                buildSchedule(bookmarkedCourses);
+            }
+            // --- END FIX ---
+
         } else { // 'watched'
             watchedCourseObjects = watchedCourseObjects.filter(c => String(c.crn) !== crn);
             localStorage.setItem('watchedCourseObjects', JSON.stringify(watchedCourseObjects));
+
+            // --- FIXED ---
+            // Find and update the button on the main course card
+            const mainButton = document.querySelector(`.watch-btn[data-crn="${crn}"]`);
+            if (mainButton) {
+                mainButton.classList.remove('bg-sky-500');
+                mainButton.classList.add('bg-gray-400');
+                mainButton.setAttribute('title', 'Watch');
+                mainButton.setAttribute('aria-pressed', 'false');
+            }
+            // --- END FIX ---
         }
         li.remove();
+        
+        // If the list is now empty after removing an item, show the empty message
+        if (optionsList.children.length === 0) {
+            optionsList.innerHTML = `<p class="text-gray-500 dark:text-gray-400">No ${type} courses</p>`;
+        }
       });
       optionsList.appendChild(li);
     });
   }
   
-  if (showBookmarksTab) showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarkedCourses, 'bookmark'));
-  if (showWatchedTab) showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourseObjects, 'watched'));
-
+  if (showBookmarksTab) {
+    showBookmarksTab.addEventListener('click', () => {
+      populateOptionsList(bookmarkedCourses, 'bookmark');
+      setActiveOptionsTab('bookmarks'); // ADDED
+    });
+  }
+  if (showWatchedTab) {
+    showWatchedTab.addEventListener('click', () => {
+      populateOptionsList(watchedCourseObjects, 'watched');
+      setActiveOptionsTab('watched'); // ADDED
+    });
+  }
   // --- Search/filter/sort ---
   const searchInput = document.getElementById('course-search');
   const sortSelect = document.getElementById('sort-courses');
