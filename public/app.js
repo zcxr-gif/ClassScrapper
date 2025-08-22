@@ -80,8 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Data ---
   let termsData = [];
   let allCourses = [];
-  let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-  let watchedCourses = JSON.parse(localStorage.getItem('watchedCourses') || '[]');
+  // ## FIX: Store full course objects instead of just CRNs to persist state across subjects ##
+  let bookmarkedCourses = JSON.parse(localStorage.getItem('bookmarkedCourses') || '[]');
+  let watchedCourseObjects = JSON.parse(localStorage.getItem('watchedCourseObjects') || '[]');
 
   const subjectMap = {
     ANT: 'Anthropology', ARC: 'Architectural Technology', ART: 'Art History', AIM: 'Artificial Intelligence Mgmt',
@@ -380,6 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
 
       const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 inline-flex items-center justify-center w-6 h-6 rounded text-red-600 dark:text-red-400">⭐</a>` : '';
+      
+      // ## FIX: Check against the new object arrays to set initial button states ##
+      const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === String(crn));
+      const isWatching = watchedCourseObjects.some(c => String(c.crn) === String(crn));
 
       const card = document.createElement('div');
       card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
@@ -425,10 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
 
             <div class="flex items-center gap-1">
-              <button class="bookmark-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${bookmarks.includes(String(crn)) ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${bookmarks.includes(String(crn)) ? '★' : '☆'}</button>
-
-              <button class="watch-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${watchedCourses.includes(String(crn)) ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="${watchedCourses.includes(String(crn)) ? 'Watching' : 'Watch'}">👁</button>
-
+              <button class="bookmark-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${isBookmarked ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${isBookmarked ? '★' : '☆'}</button>
+              <button class="watch-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${isWatching ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="${isWatching ? 'Watching' : 'Watch'}">👁</button>
               <button class="copy-crn-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN" data-crn="${crn}">📋</button>
             </div>
           </div>
@@ -492,49 +495,64 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Bookmark / Watch functions ---
+  // ## FIX: Rewritten to handle full course objects ##
   function toggleBookmark(button) {
     const crn = String(button.dataset.crn);
-    bookmarks = bookmarks.includes(crn) ? bookmarks.filter(c => c !== crn) : [...bookmarks, crn];
-    localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    if (bookmarks.includes(crn)) {
-      button.innerText = '★';
-      button.classList.add('bg-yellow-500');
-      button.classList.remove('bg-gray-400');
+    const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === crn);
+
+    if (isBookmarked) {
+        // UN-BOOKMARK: Remove the course object from the array
+        bookmarkedCourses = bookmarkedCourses.filter(c => String(c.crn) !== crn);
+        button.innerText = '☆';
+        button.classList.remove('bg-yellow-500');
+        button.classList.add('bg-gray-400');
     } else {
-      button.innerText = '☆';
-      button.classList.remove('bg-yellow-500');
-      button.classList.add('bg-gray-400');
+        // BOOKMARK: Find the full course object in allCourses and add it
+        const courseToAdd = allCourses.find(c => String(c.crn) === crn);
+        if (courseToAdd) {
+            bookmarkedCourses.push(courseToAdd);
+            button.innerText = '★';
+            button.classList.add('bg-yellow-500');
+            button.classList.remove('bg-gray-400');
+        }
     }
 
-    // *** NEW: if schedule is visible, rebuild it with updated bookmarks so classes don't vanish ***
+    localStorage.setItem('bookmarkedCourses', JSON.stringify(bookmarkedCourses));
+
     if (!scheduleContainer.classList.contains('hidden')) {
-      const bookmarkedCourses = bookmarks
-        .map(id => allCourses.find(course => String(course.crn) === String(id)))
-        .filter(Boolean);
-      buildSchedule(bookmarkedCourses);
+        buildSchedule(bookmarkedCourses);
     }
   }
-
+  
+  // ## FIX: Rewritten to handle full course objects ##
   function toggleWatch(button) {
     const crn = String(button.dataset.crn);
     const term = button.dataset.term;
-    const watching = watchedCourses.includes(crn);
-    if (!watching) {
-      watchedCourses = [...watchedCourses, crn];
-      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      button.classList.add('bg-sky-500');
-      button.classList.remove('bg-gray-400');
-      button.setAttribute('title', 'Watching');
-      button.setAttribute('aria-pressed', 'true');
-      fetch(`/watch/${term}/${crn}`, { method: 'POST' }).catch(() => {});
+    const isWatching = watchedCourseObjects.some(c => String(c.crn) === crn);
+
+    if (!isWatching) {
+        const courseToWatch = allCourses.find(c => String(c.crn) === crn);
+        if (courseToWatch) {
+            watchedCourseObjects.push(courseToWatch);
+            localStorage.setItem('watchedCourseObjects', JSON.stringify(watchedCourseObjects));
+            
+            button.classList.add('bg-sky-500');
+            button.classList.remove('bg-gray-400');
+            button.setAttribute('title', 'Watching');
+            button.setAttribute('aria-pressed', 'true');
+            
+            fetch(`/watch/${term}/${crn}`, { method: 'POST' }).catch(() => {});
+        }
     } else {
-      watchedCourses = watchedCourses.filter(c => c !== crn);
-      localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses));
-      button.classList.remove('bg-sky-500');
-      button.classList.add('bg-gray-400');
-      button.setAttribute('title', 'Watch');
-      button.setAttribute('aria-pressed', 'false');
-      fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {});
+        watchedCourseObjects = watchedCourseObjects.filter(c => String(c.crn) !== crn);
+        localStorage.setItem('watchedCourseObjects', JSON.stringify(watchedCourseObjects));
+        
+        button.classList.remove('bg-sky-500');
+        button.classList.add('bg-gray-400');
+        button.setAttribute('title', 'Watch');
+        button.setAttribute('aria-pressed', 'false');
+        
+        fetch(`/watch/${term}/${crn}`, { method: 'DELETE' }).catch(() => {});
     }
   }
 
@@ -619,42 +637,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) closeModal(); });
 
-  // --- Options panel list populate (unchanged) ---
+  // --- Options panel list populate ---
+  // ## FIX: Rewritten to handle lists of course objects directly ##
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
     if (list.length === 0) {
       optionsList.innerHTML = `<p class="text-gray-500 dark:text-gray-400">No ${type} courses</p>`;
       return;
     }
-    list.forEach(crn => {
-      const course = allCourses.find(c => String(c.crn) === String(crn));
-      if (!course) {
-        const liMissing = document.createElement('div');
-        liMissing.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex justify-between items-center';
-        liMissing.innerHTML = `
-          <div>
-            <div class="font-semibold">CRN ${crn}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-300">Course not currently in list</div>
-          </div>
-          <div>
-            <button class="remove-btn text-red-500 text-sm font-bold">✖</button>
-          </div>
-        `;
-        liMissing.querySelector('.remove-btn').addEventListener('click', () => {
-          if (type === 'bookmark') { bookmarks = bookmarks.filter(c => c !== crn); localStorage.setItem('bookmarks', JSON.stringify(bookmarks)); }
-          else { watchedCourses = watchedCourses.filter(c => c !== crn); localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses)); }
-          liMissing.remove();
-        });
-        optionsList.appendChild(liMissing);
-        return;
-      }
+    list.forEach(course => {
+      const crn = String(course.crn);
       const li = document.createElement('div');
       li.className = 'bg-white dark:bg-gray-700 rounded-lg p-3 shadow flex flex-col gap-1';
       const courseNumber = getCourseNumber(course);
-      const seatsText = course.seats ? `${course.seats.remaining ?? (course.seats.capacity - course.seats.actual)} / ${course.seats.capacity} seats` : 'Seats info N/A';
+      
+      const capacity = parseSeatValue(course.seats?.capacity);
+      const actual = parseSeatValue(course.seats?.actual);
+      let remaining = parseSeatValue(course.seats?.remaining);
+      if (isNaN(remaining)) remaining = isNaN(capacity) || isNaN(actual) ? 'N/A' : (capacity - actual);
+      const seatsText = !isNaN(capacity) ? `${remaining} / ${capacity} seats remaining` : 'Seats info N/A';
+      
       const instructorDisplay = course.instructor || extractInstructorFrom(course) || 'TBA';
       const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
       const rmpMiniLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="text-red-600 dark:text-red-400 text-xs underline ml-1">Rate Instructor</a>` : '';
+
       li.innerHTML = `
         <div class="flex justify-between items-start">
           <div>
@@ -675,15 +681,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       li.querySelector('.remove-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        if (type === 'bookmark') { bookmarks = bookmarks.filter(c => c !== crn); localStorage.setItem('bookmarks', JSON.stringify(bookmarks)); }
-        else { watchedCourses = watchedCourses.filter(c => c !== crn); localStorage.setItem('watchedCourses', JSON.stringify(watchedCourses)); }
+        if (type === 'bookmark') {
+            bookmarkedCourses = bookmarkedCourses.filter(c => String(c.crn) !== crn);
+            localStorage.setItem('bookmarkedCourses', JSON.stringify(bookmarkedCourses));
+        } else { // 'watched'
+            watchedCourseObjects = watchedCourseObjects.filter(c => String(c.crn) !== crn);
+            localStorage.setItem('watchedCourseObjects', JSON.stringify(watchedCourseObjects));
+        }
         li.remove();
       });
       optionsList.appendChild(li);
     });
   }
-  if (showBookmarksTab) showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarks, 'bookmark'));
-  if (showWatchedTab) showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourses, 'watched'));
+  
+  // ## FIX: Pass the correct object arrays to the options panel ##
+  if (showBookmarksTab) showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarkedCourses, 'bookmark'));
+  if (showWatchedTab) showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourseObjects, 'watched'));
 
   // --- Search/filter/sort (unchanged) ---
   const searchInput = document.getElementById('course-search');
@@ -1074,14 +1087,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Toggle schedule
+  // ## FIX: Simplified to use the persistent bookmarkedCourses array directly ##
   function toggleSchedule(show) {
     const filterControls = document.getElementById('filter-controls');
 
     if (show) {
-      const bookmarkedCourses = bookmarks
-        .map(crn => allCourses.find(course => String(course.crn) === String(crn)))
-        .filter(course => course);
-
       if (bookmarkedCourses.length === 0) {
         alert('Please bookmark one or more courses to see them on the schedule.');
         return;
@@ -1108,10 +1118,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // init buttons
+  // ## FIX: Updated this function to check against the new object arrays ##
   function initButtonStates() {
     document.querySelectorAll('.bookmark-btn').forEach(b => {
       const crn = String(b.dataset.crn);
-      if (bookmarks.includes(crn)) {
+      if (bookmarkedCourses.some(c => String(c.crn) === crn)) {
         b.innerText = '★';
         b.classList.add('bg-yellow-500');
         b.classList.remove('bg-gray-400');
@@ -1123,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.querySelectorAll('.watch-btn').forEach(w => {
       const crn = String(w.dataset.crn);
-      if (watchedCourses.includes(crn)) {
+      if (watchedCourseObjects.some(c => String(c.crn) === crn)) {
         w.classList.add('bg-sky-500');
         w.classList.remove('bg-gray-400');
         w.setAttribute('title', 'Watching');
