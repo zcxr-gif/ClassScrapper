@@ -1,4 +1,4 @@
-// app.js (updated: with debugger for colors)
+// app.js (Final Version)
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -80,7 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Data ---
   let termsData = [];
   let allCourses = [];
-  // ## FIX: Store full course objects instead of just CRNs to persist state across subjects ##
   let bookmarkedCourses = JSON.parse(localStorage.getItem('bookmarkedCourses') || '[]');
   let watchedCourseObjects = JSON.parse(localStorage.getItem('watchedCourseObjects') || '[]');
 
@@ -101,26 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     THE: 'Theatre', VIS: 'Visual Communications'
   };
 
-  // tailwind class map (kept for other parts), but schedule now uses *hex map* for reliable colors
-  const subjectColorMap = {
-    ANT: 'bg-red-500', ARC: 'bg-green-500', ART: 'bg-blue-500', AIM: 'bg-yellow-500',
-    AET: 'bg-lime-600', AVN: 'bg-purple-500', BIO: 'bg-pink-500', BUS: 'bg-indigo-600',
-    CHM: 'bg-teal-500', CHI: 'bg-red-600', CIV: 'bg-gray-600', CSC: 'bg-orange-500',
-    CPS: 'bg-sky-600', BCS: 'bg-cyan-500', CON: 'bg-amber-500', CRJ: 'bg-rose-600',
-    DEN: 'bg-teal-400', ECO: 'bg-green-600', EET: 'bg-blue-600', ETM: 'bg-violet-500',
-    EGL: 'bg-rose-500', ENV: 'bg-emerald-500', FYE: 'bg-gray-500', FRE: 'bg-blue-400',
-    FRX: 'bg-indigo-400', GIS: 'bg-emerald-600', GEO: 'bg-lime-600', GER: 'bg-amber-500',
-    GRO: 'bg-fuchsia-500', HPW: 'bg-green-400', HIS: 'bg-orange-500', HON: 'bg-yellow-400',
-    HOR: 'bg-lime-400', HUM: 'bg-pink-400', IND: 'bg-cyan-600', IXD: 'bg-sky-500',
-    ITA: 'bg-green-600', MTH: 'bg-indigo-500', MET: 'bg-gray-600', MLS: 'bg-teal-500',
-    MLG: 'bg-red-400', NUR: 'bg-rose-400', NTR: 'bg-lime-300', PHI: 'bg-purple-400',
-    PED: 'bg-sky-300', PHY: 'bg-orange-300', POL: 'bg-indigo-600', PCM: 'bg-fuchsia-500',
-    PSY: 'bg-violet-500', RAM: 'bg-yellow-500', RUS: 'bg-red-600', STS: 'bg-gray-500',
-    SST: 'bg-sky-600', SOC: 'bg-pink-500', SPA: 'bg-orange-600', SPE: 'bg-fuchsia-300',
-    SMT: 'bg-blue-600', THE: 'bg-purple-500', VIS: 'bg-amber-400'
-  };
-
-  // reliable hex color map for schedule blocks (approximate Tailwind colors)
   const subjectHexMap = {
     ANT:'#ef4444', ARC:'#22c55e', ART:'#3b82f6', AIM:'#eab308',
     AET:'#84cc16', AVN:'#a855f7', BIO:'#ec4899', BUS:'#4f46e5',
@@ -142,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Schedule config ---
   const SCHEDULE_START_HOUR = 7; // 7 AM
   const SCHEDULE_END_HOUR = 22;  // 10 PM
-  const HOUR_HEIGHT = 48;        // px per hour in schedule column (reduce to pack tighter)
+  const HOUR_HEIGHT = 48;        // px per hour in schedule column
 
   // Schedule container
   const scheduleContainer = document.createElement('div');
@@ -291,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
-  // --- Seats UI (unchanged) ---
   function updateSeatUI(crn, capacity, actual, remaining) {
     const bar = document.getElementById(`seat-bar-${crn}`);
     const label = document.getElementById(`seat-label-${crn}`);
@@ -330,7 +308,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // extract instructor
   function extractInstructorFrom(details) {
     if (!details) return '';
     if (details.instructor && String(details.instructor).trim()) return String(details.instructor).trim();
@@ -349,7 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   }
 
-  // --- Display courses (cards) ---
   function displayCourses(courses) {
     if (!coursesContainer) return;
     coursesContainer.innerHTML = '';
@@ -382,7 +358,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 inline-flex items-center justify-center w-6 h-6 rounded text-red-600 dark:text-red-400">⭐</a>` : '';
       
-      // ## FIX: Check against the new object arrays to set initial button states ##
       const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === String(crn));
       const isWatching = watchedCourseObjects.some(c => String(c.crn) === String(crn));
 
@@ -439,7 +414,6 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       coursesContainer.appendChild(card);
 
-      // seats fetch (unchanged)
       if (course.seats && (course.seats.capacity || course.seats.actual || course.seats.remaining)) {
         const capacity = parseSeatValue(course.seats.capacity);
         const actual = parseSeatValue(course.seats.actual);
@@ -495,19 +469,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Bookmark / Watch functions ---
-  // ## FIX: Rewritten to handle full course objects ##
   function toggleBookmark(button) {
     const crn = String(button.dataset.crn);
     const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === crn);
 
     if (isBookmarked) {
-        // UN-BOOKMARK: Remove the course object from the array
         bookmarkedCourses = bookmarkedCourses.filter(c => String(c.crn) !== crn);
         button.innerText = '☆';
         button.classList.remove('bg-yellow-500');
         button.classList.add('bg-gray-400');
     } else {
-        // BOOKMARK: Find the full course object in allCourses and add it
         const courseToAdd = allCourses.find(c => String(c.crn) === crn);
         if (courseToAdd) {
             bookmarkedCourses.push(courseToAdd);
@@ -524,7 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  // ## FIX: Rewritten to handle full course objects ##
   function toggleWatch(button) {
     const crn = String(button.dataset.crn);
     const term = button.dataset.term;
@@ -638,7 +608,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) closeModal(); });
 
   // --- Options panel list populate ---
-  // ## FIX: Rewritten to handle lists of course objects directly ##
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
     if (list.length === 0) {
@@ -694,11 +663,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // ## FIX: Pass the correct object arrays to the options panel ##
   if (showBookmarksTab) showBookmarksTab.addEventListener('click', () => populateOptionsList(bookmarkedCourses, 'bookmark'));
   if (showWatchedTab) showWatchedTab.addEventListener('click', () => populateOptionsList(watchedCourseObjects, 'watched'));
 
-  // --- Search/filter/sort (unchanged) ---
+  // --- Search/filter/sort ---
   const searchInput = document.getElementById('course-search');
   const sortSelect = document.getElementById('sort-courses');
   const typeFilter = document.getElementById('filter-type');
@@ -829,9 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return L < 0.5 ? '#ffffff' : '#111827';
   }
 
-  // -----------------------
-  // NEW schedule builder (absolute-positioned, minute-accurate)
-  // -----------------------
+  // --- Schedule builder ---
   function buildSchedule(courses) {
     scheduleContainer.innerHTML = '';
 
@@ -845,13 +811,11 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     scheduleContainer.appendChild(header);
 
-    // grid wrapper: left column hours, right 7 day columns
     const gridWrap = document.createElement('div');
     gridWrap.className = 'w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden';
     gridWrap.style.display = 'flex';
     gridWrap.style.padding = '0';
 
-    // left hours column
     const hoursCol = document.createElement('div');
     hoursCol.style.width = '74px';
     hoursCol.style.boxSizing = 'border-box';
@@ -872,7 +836,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     hoursCol.appendChild(hoursContainer);
 
-    // days container
     const daysCols = document.createElement('div');
     daysCols.style.flex = '1';
     daysCols.style.display = 'flex';
@@ -881,7 +844,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-    // day header
     const dayHeader = document.createElement('div');
     dayHeader.style.display = 'flex';
     dayHeader.className = 'mb-2 items-center';
@@ -899,7 +861,6 @@ document.addEventListener('DOMContentLoaded', () => {
     dayHeader.appendChild(dayHeaderCols);
     scheduleContainer.appendChild(dayHeader);
 
-    // create each day column
     const dayColumns = [];
     for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
       const col = document.createElement('div');
@@ -908,7 +869,6 @@ document.addEventListener('DOMContentLoaded', () => {
       col.style.height = `${containerHeight}px`;
       col.style.boxSizing = 'border-box';
       col.className = 'px-1';
-      // faint separators per hour
       for (let h = 0; h < totalHours; h++) {
         const sep = document.createElement('div');
         sep.style.position = 'absolute';
@@ -928,7 +888,6 @@ document.addEventListener('DOMContentLoaded', () => {
     gridWrap.appendChild(daysCols);
     scheduleContainer.appendChild(gridWrap);
 
-    // TBA area
     const tbaContainer = document.createElement('div');
     tbaContainer.id = 'tba-courses';
     tbaContainer.className = 'mt-6';
@@ -938,7 +897,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     scheduleContainer.appendChild(tbaContainer);
 
-    // helpers
     function minutesToTopPx(min) {
       return ((min - (SCHEDULE_START_HOUR * 60)) / 60) * HOUR_HEIGHT;
     }
@@ -948,7 +906,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const placedRanges = Array.from({length:7}, () => []);
 
-    // place courses
     courses.forEach(course => {
       if (!course.schedule || course.schedule.length === 0) {
         addCourseToTBA(course, scheduleContainer.querySelector('#tba-list'));
@@ -986,12 +943,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const courseNumber = getCourseNumber(course);
           const section = course.section ? String(course.section) : '';
-          const subj = course.subjectCode || '';
-          const hex = subjectHexMap[subj] || '#6b7280'; // fallback gray
           
-          // DEBUGGER LINE
-          console.log(`Course: ${course.courseName}, Subject: '${subj}', Color: ${hex}`);
+          const rawSubj = course.subjectCode || '';
+          const subj = rawSubj.split(' ')[0];
 
+          const hex = subjectHexMap[subj] || '#6b7280';
           const textColor = textColorForHex(hex);
 
           const block = document.createElement('div');
@@ -1012,7 +968,6 @@ document.addEventListener('DOMContentLoaded', () => {
           block.style.padding = '6px 6px';
           block.setAttribute('data-crn', course.crn);
 
-          // ORDER: class (top), time (middle), where (bottom)
           const firstLine = document.createElement('div');
           firstLine.className = 'font-bold text-sm leading-tight truncate';
           firstLine.textContent = `${subj} ${courseNumber} ${section}`.trim();
@@ -1029,23 +984,20 @@ document.addEventListener('DOMContentLoaded', () => {
           block.appendChild(secondLine);
           block.appendChild(thirdLine);
 
-          // tiny blocks: hide where or reduce size
           const minForThreeLines = 36;
           if (boundedHeight < minForThreeLines) {
             thirdLine.style.display = 'none';
-            // --- FIX FOR UNREADABLE TEXT ---
             if (boundedHeight < 24) {
                 secondLine.style.display = 'none';
-                firstLine.style.fontSize = '10px'; // Make font smaller
-                firstLine.style.lineHeight = '1.1'; // Adjust line height
-                block.style.padding = '3px 6px';   // Reduce padding
+                firstLine.style.fontSize = '10px';
+                firstLine.style.lineHeight = '1.1';
+                block.style.padding = '3px 6px';
             }
           }
 
-          // conflict detection
           const overlapping = placedRanges[dayIndex].some(r => !(endMin <= r.start || startMin >= r.end));
           if (overlapping) {
-            block.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)'; // red ring
+            block.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.9)';
             block.title = 'Time conflict!';
             placedRanges[dayIndex].forEach(r => {
               if (!(endMin <= r.start || startMin >= r.end) && r.el) {
@@ -1067,11 +1019,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // back button wiring
     const backBtn = scheduleContainer.querySelector('#back-to-list');
     if (backBtn) backBtn.addEventListener('click', () => toggleSchedule(false));
 
-    // If no TBA items
     const tbaList = scheduleContainer.querySelector('#tba-list');
     if (tbaList && !tbaList.childElementCount) {
       tbaList.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No TBA courses.</p>`;
@@ -1096,8 +1046,6 @@ document.addEventListener('DOMContentLoaded', () => {
     tbaListEl.appendChild(li);
   }
 
-  // Toggle schedule
-  // ## FIX: Simplified to use the persistent bookmarkedCourses array directly ##
   function toggleSchedule(show) {
     const filterControls = document.getElementById('filter-controls');
 
@@ -1127,8 +1075,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // init buttons
-  // ## FIX: Updated this function to check against the new object arrays ##
   function initButtonStates() {
     document.querySelectorAll('.bookmark-btn').forEach(b => {
       const crn = String(b.dataset.crn);
