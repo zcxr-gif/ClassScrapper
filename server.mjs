@@ -45,6 +45,184 @@ function hashSchedule(schedule) {
 }
 
 // --- Helper Functions (Scraping Logic) ---
+async function scrapeCatalogPage(url, client) {
+  try {
+    const res = await client.get(url);
+    const $ = load(res.data);
+
+    const results = [];
+
+    // Each course block is inside a table.datadisplaytable (from sample)
+    $('table.datadisplaytable').each((_, table) => {
+      const $table = $(table);
+      const titleLink = $table.find('td.nttitle a').first();
+      if (!titleLink.length) return; // skip non-course tables
+
+      const titleText = titleLink.text().trim(); // e.g. "CHM 124L - Principles..."
+      const href = titleLink.attr('href') || null;
+
+      // Try to split subject + number from title
+      let subject = null, number = null, courseTitle = titleText;
+      const m = titleText.match(/^([A-Z]{2,4})\s+([0-9A-Z-]+)\s*-\s*(.*)$/);
+      if (m) {
+        subject = m[1];
+        number = m[2];
+        courseTitle = m[3].trim();
+      } else {
+        // fallback: try split at first ' - '
+        const parts = titleText.split(' - ');
+        if (parts.length >= 2) {
+          courseTitle = parts.slice(1).join(' - ').trim();
+        }
+      }
+
+      // Find the details cell that follows the title in same table
+      const detailsTd = $table.find('td.ntdefault').first();
+      if (!detailsTd.length) {
+        results.push({
+          title: courseTitle,
+          subject,
+          number,
+          href,
+          error: 'No details cell found'
+        });
+        return;
+      }
+
+      // Preserve <br> as newlines, and close-block tags as newlines
+      let detailsHtml = detailsTd.html() || '';
+      detailsHtml = detailsHtml
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|ul|ol|table|tr|td)>/gi, '\n')
+        .replace(/&nbsp;/g, ' ');
+
+      // Strip remaining tags, then normalize whitespace and split into lines
+      const tmp = load('<div>' + detailsHtml + '</div>');
+      let text = tmp('div').text();
+      text = text.replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+      // Helper to read a multi-line value: if the value after ":" is empty,
+      // take subsequent non-header lines as continuation
+      const headers = ['Prerequisite', 'Corequisite', 'Course Attributes', 'Schedule Types', 'Levels', 'Credit hours', 'Lab hours'];
+
+      function readField(startIdx, headerName) {
+        // startIdx points to a line that begins with headerName (case-insensitive)
+        const line = lines[startIdx];
+        const afterColon = line.split(':').slice(1).join(':').trim();
+        if (afterColon) return afterColon;
+
+        // multiline: collect next lines until we hit a known header or empty line
+        const collected = [];
+        for (let i = startIdx + 1; i < lines.length; i++) {
+          const ln = lines[i];
+          const isHeader = headers.some(h => new RegExp('^' + h + '(:|$)', 'i').test(ln));
+          if (isHeader) break;
+          collected.push(ln);
+        }
+        return collected.join(' ').trim() || null;
+      }
+
+      // find index of first header to split description
+      const headerIdx = lines.findIndex(ln => {
+        return /^Prerequisite/i.test(ln)
+          || /^Corequisite/i.test(ln)
+          || /Credit hours/i.test(ln)
+          || /^Levels:/i.test(ln)
+          || /^Course Attributes:/i.test(ln)
+          || /^Schedule Types:/i.test(ln);
+      });
+
+      const description = headerIdx === -1 ? lines.join(' ') : lines.slice(0, headerIdx).join(' ');
+
+      // Now extract fields by scanning lines
+      let prerequisites = null;
+      let corequisites = null;
+      let credits = null;
+      let labHours = null;
+      let levels = null;
+      let scheduleTypes = null;
+      let department = null;
+      let attributes = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+
+        if (/^Prerequisite/i.test(ln)) {
+          prerequisites = readField(i, 'Prerequisite');
+          continue;
+        }
+        if (/^Corequisite/i.test(ln)) {
+          corequisites = readField(i, 'Corequisite');
+          continue;
+        }
+        if (/Credit hours/i.test(ln)) {
+          const m = ln.match(/(\d+\.\d+)/);
+          if (m) credits = m[1];
+          continue;
+        }
+        if (/Lab hours/i.test(ln)) {
+          const m = ln.match(/(\d+\.\d+)/);
+          if (m) labHours = m[1];
+          continue;
+        }
+        if (/^Levels:/i.test(ln)) {
+          levels = ln.split(':').slice(1).join(':').trim();
+          continue;
+        }
+        if (/^Schedule Types:/i.test(ln)) {
+          const val = readField(i, 'Schedule Types');
+          scheduleTypes = val ? val.split(',').map(s => s.trim()).filter(Boolean) : null;
+          continue;
+        }
+        if (/Department$/i.test(ln)) {
+          department = ln.replace(/Department$/i, '').trim();
+          continue;
+        }
+        if (/^Course Attributes:/i.test(ln)) {
+          const val = readField(i, 'Course Attributes');
+          if (val) {
+            // Attributes may be separated by commas or ' - ' or multiple spaces
+            attributes = val.split(/,|;|\u2013| - /).map(s => s.trim()).filter(Boolean);
+          }
+          continue;
+        }
+      }
+
+      results.push({
+        title: courseTitle,
+        subject,
+        number,
+        href,
+        description: description || null,
+        prerequisites: prerequisites || null,
+        corequisites: corequisites || null,
+        credits: credits || null,
+        labHours: labHours || null,
+        levels: levels || null,
+        scheduleTypes: scheduleTypes || null,
+        department: department || null,
+        attributes: attributes || null,
+        rawText: text // include raw text for debugging if you need it
+      });
+    }); // end each table
+
+    // If you expected only one course from the page, return first
+    if (results.length === 0) {
+      return { error: "No course blocks found on page." };
+    } else if (results.length === 1) {
+      return results[0];
+    } else {
+      return results; // array when page lists multiple courses
+    }
+
+  } catch (e) {
+    console.error(`Error scraping catalog page at ${url}:`, e && e.message);
+    return { error: "Failed to scrape catalog page." };
+  }
+}
+
 async function fetchTerms() {
   const jar = new CookieJar();
   const client = wrapper(axios.create({ jar }));
@@ -91,8 +269,10 @@ async function fetchSubjects(termCode) {
   return subjects;
 }
 
+// --- MODIFIED fetchCourses Function ---
 async function fetchCourses(termCode, subject, courseNumber, client) {
   const formData = new URLSearchParams();
+  // ... (keep all the formData.append lines exactly as they are)
   formData.append("term_in", termCode);
   formData.append("sel_subj", "dummy");
   formData.append("sel_day", "dummy");
@@ -127,64 +307,77 @@ async function fetchCourses(termCode, subject, courseNumber, client) {
   );
 
   const $ = load(res.data);
-  const courses = [];
+  const coursePromises = [];
   const limitHit = $('body').text().includes('All results could not be displayed');
 
   $("th.ddtitle").each((_, element) => {
-    try {
-      const titleLink = $(element).find('a');
-      const fullTitle = titleLink.text().trim();
-      const titleParts = fullTitle.split(" - ");
-      if (titleParts.length < 4) return;
+    const promise = (async () => {
+      try {
+        const titleLink = $(element).find('a');
+        const fullTitle = titleLink.text().trim();
+        const titleParts = fullTitle.split(" - ");
+        if (titleParts.length < 4) return null;
 
-      const courseName = titleParts[0].trim();
-      const crn = titleParts[1].trim();
-      const subjectCode = titleParts[2].trim();
-      const section = titleParts[3].trim();
-      if (!crn || !/^\d{5}$/.test(crn)) return;
+        const courseName = titleParts[0].trim();
+        const crn = titleParts[1].trim();
+        const subjectCode = titleParts[2].trim();
+        const section = titleParts[3].trim();
+        if (!crn || !/^\d{5}$/.test(crn)) return null;
 
-      const schedule = [];
-      let primaryInstructor = "N/A";
-      
-      const detailsRow = $(element).closest('tr').next();
-      const meetingTimesTable = detailsRow.find('table.datadisplaytable[summary*="scheduled meeting times"]');
-      const meetingRows = meetingTimesTable.find('tr');
+        const detailsRow = $(element).closest('tr').next();
+        
+        // --- NEW: Find catalog link and scrape it ---
+        const catalogLinkElement = detailsRow.find('a:contains("View Catalog Entry")');
+        let catalogData = {};
+        if (catalogLinkElement.length > 0) {
+          const catalogUrl = "https://oasis.farmingdale.edu" + catalogLinkElement.attr('href');
+          catalogData = await scrapeCatalogPage(catalogUrl, client);
+        }
+        // --- END NEW ---
 
-      if (meetingRows.length > 1) {
-        meetingRows.slice(1).each((_, row) => {
-          const cells = $(row).find('td');
-          if (cells.length >= 7) { 
-            const instructorName = cells.eq(6).text().split('(')[0].trim().replace(/\s+/g, ' ');
+        const meetingTimesTable = detailsRow.find('table.datadisplaytable[summary*="scheduled meeting times"]');
+        const meetingRows = meetingTimesTable.find('tr');
+        const schedule = [];
+        let primaryInstructor = "N/A";
 
-            schedule.push({
-              type: cells.eq(0).text().trim(),
-              time: cells.eq(1).text().trim(),
-              days: cells.eq(2).text().trim(),
-              where: cells.eq(3).text().trim(),
-              dateRange: cells.eq(4).text().trim(),
-              scheduleType: cells.eq(5).text().trim(),
-              instructor: instructorName
-            });
-          }
-        });
+        if (meetingRows.length > 1) {
+          meetingRows.slice(1).each((_, row) => {
+            const cells = $(row).find('td');
+            if (cells.length >= 7) {
+              const instructorName = cells.eq(6).text().split('(')[0].trim().replace(/\s+/g, ' ');
+              schedule.push({
+                type: cells.eq(0).text().trim(),
+                time: cells.eq(1).text().trim(),
+                days: cells.eq(2).text().trim(),
+                where: cells.eq(3).text().trim(),
+                dateRange: cells.eq(4).text().trim(),
+                scheduleType: cells.eq(5).text().trim(),
+                instructor: instructorName
+              });
+            }
+          });
+        }
+        if (schedule.length > 0 && schedule[0].instructor) primaryInstructor = schedule[0].instructor;
+
+        return {
+          crn,
+          courseName,
+          subjectCode,
+          section,
+          instructor: primaryInstructor,
+          schedule,
+          catalog: catalogData // Merge catalog data here
+        };
+
+      } catch (e) {
+        console.error(`Error parsing a course row for subject ${subject}:`, e.message);
+        return null; // Return null on error
       }
-      if (schedule.length > 0 && schedule[0].instructor) primaryInstructor = schedule[0].instructor;
-
-      courses.push({
-        crn,
-        courseName,
-        subjectCode,
-        section,
-        courseNumber: section,
-        instructor: primaryInstructor,
-        schedule 
-      });
-
-    } catch (e) {
-      console.error(`Error parsing a course row for subject ${subject}:`, e.message);
-    }
+    })();
+    coursePromises.push(promise);
   });
 
+  const courses = (await Promise.all(coursePromises)).filter(Boolean); // Await all and filter out any nulls
   return { courses, limitHit };
 }
 
@@ -211,8 +404,24 @@ async function fetchCourseDetails(termCode, crn) {
   const details = {};
 
   const titleElement = $("th.ddlabel").first();
-  details.title = titleElement.contents().first().text().trim();
+  const fullTitle = titleElement.contents().first().text().trim();
+  details.title = fullTitle;
   if (!details.title) return null;
+
+  // --- NEW CODE: Parse Subject and Course Number from the title ---
+  const titleParts = fullTitle.split(' - ');
+  let subject = null;
+  let courseNumber = null;
+
+  if (titleParts.length >= 3) {
+    const subjectAndCourse = titleParts[2].trim();
+    const lastSpaceIndex = subjectAndCourse.lastIndexOf(' ');
+    if (lastSpaceIndex !== -1) {
+      subject = subjectAndCourse.substring(0, lastSpaceIndex).trim();
+      courseNumber = subjectAndCourse.substring(lastSpaceIndex + 1).trim();
+    }
+  }
+  // --- END NEW CODE ---
 
   const detailsBlock = titleElement.closest('tr').next().find('td.dddefault').text();
   
@@ -243,151 +452,47 @@ async function fetchCourseDetails(termCode, crn) {
     }
   });
 
-  details.schedule = [];
-  details.instructor = "N/A";
+  // --- START: Added Code to Parse Schedule and Instructor ---
+  const schedule = [];
+  let primaryInstructor = "N/A";
+  
+  const meetingTimesTable = $('table.datadisplaytable[summary*="Scheduled Meeting Times"]');
+  const meetingRows = meetingTimesTable.find('tr');
+
+  if (meetingRows.length > 1) {
+    meetingRows.slice(1).each((_, row) => {
+      const cells = $(row).find('td');
+      if (cells.length >= 7) {
+        const instructorName = cells.eq(6).text().split('(')[0].trim().replace(/\s+/g, ' ');
+        schedule.push({
+          type: cells.eq(0).text().trim(),
+          time: cells.eq(1).text().trim(),
+          days: cells.eq(2).text().trim(),
+          where: cells.eq(3).text().trim(),
+          dateRange: cells.eq(4).text().trim(),
+          scheduleType: cells.eq(5).text().trim(),
+          instructor: instructorName
+        });
+      }
+    });
+  }
+  
+  if (schedule.length > 0 && schedule[0].instructor) {
+    primaryInstructor = schedule[0].instructor;
+  }
+  
+  details.schedule = schedule;
+  details.instructor = primaryInstructor;
+  // --- END: Added Code ---
+
+
+
+details.subject = subject;
+  details.courseNumber = courseNumber;
 
   return details;
 }
 
-// --- Fetch Catalog Entry (improved, tailored to Farmingdale's markup) ---
-async function fetchCatalogEntry(termCode, subject, courseNumber) {
-  const cacheKey = `catalog_${termCode}_${subject}_${courseNumber}`;
-  try {
-    // try cache first
-    const cached = await getFromCache(db, cacheKey);
-    if (cached) return cached;
-
-    const jar = new CookieJar();
-    const client = wrapper(axios.create({ jar }));
-    // Prime session (same pattern used across this file)
-    await client.get("https://oasis.farmingdale.edu/pls/prod/bwckschd.p_disp_dyn_sched");
-
-    const url = `https://oasis.farmingdale.edu/pls/prod/bwckctlg.p_display_courses?term_in=${encodeURIComponent(termCode)}&one_subj=${encodeURIComponent(subject)}&sel_crse_strt=${encodeURIComponent(courseNumber)}&sel_crse_end=${encodeURIComponent(courseNumber)}&sel_subj=&sel_levl=&sel_schd=&sel_coll=&sel_divs=&sel_dept=&sel_attr=`;
-    const res = await client.get(url);
-    const $ = load(res.data);
-
-    const entries = [];
-
-    // Each catalog entry on the page: td.nttitle (title link) followed by td.ntdefault (content)
-    $('td.nttitle a').each((i, el) => {
-      try {
-        const title = $(el).text().trim(); // e.g. "CHM 124L - Principles of Chemistry (Lab)"
-        const detailsTd = $(el).closest('tr').next().find('td.ntdefault');
-
-        // Raw HTML and cleaned text for different parsing strategies
-        const rawHtml = detailsTd.html() || '';
-        const rawText = detailsTd.text().replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
-
-        // Extract description: everything up to the first label like "Prerequisite(s):" or "Corequisite(s):" or "0.000 Credit"
-        let description = rawText;
-        const descCutters = [/Prerequisite[s]?:/i, /Corequisite[s]?:/i, /Schedule Types:/i, /Course Attributes:/i, /\d+\.\d+\s+Credit/i, /\d+\.\d+\s+Lab/i];
-        for (const rx of descCutters) {
-          const m = rawText.search(rx);
-          if (m !== -1) {
-            description = rawText.slice(0, m).trim();
-            break;
-          }
-        }
-
-        // Prereqs / Coreqs
-        const prereqMatch = rawText.match(/Prerequisite[s]?:\s*(.+?)(?:\n|$)/i);
-        const coreqMatch = rawText.match(/Corequisite[s]?:\s*(.+?)(?:\n|$)/i);
-
-        // Credits & lab hours (may appear as lines like "0.000 Credit hours" or "3.000   Lab hours")
-        const credits = {};
-        const creditMatches = [...rawText.matchAll(/(\d+\.\d+)\s+(Credit|Lab)[^\n]*/ig)];
-        for (const cm of creditMatches) {
-          const val = cm[1];
-          const kind = cm[2].toLowerCase();
-          if (kind.startsWith('credit')) credits.creditHours = parseFloat(val);
-          else if (kind.startsWith('lab')) credits.labHours = parseFloat(val);
-          else {
-            // fallback to storing by raw kind
-            credits[kind] = parseFloat(val);
-          }
-        }
-
-        // Schedule Types (the page places them after a <SPAN class="fieldlabeltext">Schedule Types:</SPAN>)
-        let scheduleTypes = null;
-        // Try to parse them from the HTML (keeps links / text intact)
-        const schedSpan = detailsTd.find('span.fieldlabeltext').filter((i, s) => $(s).text().trim().startsWith('Schedule Types'));
-        if (schedSpan.length) {
-          // schedule types appear immediately after the span, sometimes as links + text separated by commas
-          const after = schedSpan.closest('td').html().split($(schedSpan).parent().html())[1] || '';
-          // fallback: text extraction with the "Schedule Types:" prefix
-          const schedText = rawText.match(/Schedule Types:\s*(.+?)(?:\n|$)/i);
-          if (schedText) scheduleTypes = schedText[1].split(',').map(s => s.trim()).filter(Boolean);
-        } else {
-          const schedText = rawText.match(/Schedule Types:\s*(.+?)(?:\n|$)/i);
-          if (schedText) scheduleTypes = schedText[1].split(',').map(s => s.trim()).filter(Boolean);
-        }
-
-        // Course Attributes
-        const attrsMatch = rawText.match(/Course Attributes?:\s*(.+?)(?:\n|$)/i);
-        const attributes = attrsMatch ? attrsMatch[1].split(',').map(s => s.trim()).filter(Boolean) : null;
-
-        // Department: lines like "Chemistry Department"
-        const deptMatch = rawText.match(/^(.+Department)\s*$/im);
-        const department = deptMatch ? deptMatch[1].trim() : null;
-
-        entries.push({
-          title,
-          description,
-          prerequisites: prereqMatch ? prereqMatch[1].trim() : null,
-          corequisites: coreqMatch ? coreqMatch[1].trim() : null,
-          credits: Object.keys(credits).length ? credits : null,
-          scheduleTypes,
-          attributes,
-          department,
-          rawText,
-          rawHtml
-        });
-      } catch (e) {
-        console.error('Error parsing a catalog entry block:', e.message);
-      }
-    });
-
-    // If nothing was parsed, fallback to returning whole page text
-    if (entries.length === 0) {
-      const whole = $('body').text().trim();
-      entries.push({
-        title: `${subject} ${courseNumber} (catalog fallback)`,
-        description: whole.slice(0, 4000),
-        prerequisites: null,
-        corequisites: null,
-        credits: null,
-        scheduleTypes: null,
-        attributes: null,
-        department: null,
-        rawText: whole,
-        rawHtml: $('body').html() || ''
-      });
-    }
-
-    // cache and return
-    await saveToCache(db, cacheKey, entries);
-    return entries;
-  } catch (err) {
-    console.error('Failed to fetch catalog entry:', err.message);
-    throw err;
-  }
-}
-
-// --- Catalog endpoint ---
-app.get('/catalog/:term/:subject/:course', async (req, res) => {
-  try {
-    const { term, subject, course } = req.params;
-    if (!term || !/^\d{6}$/.test(term) || !subject || !course) {
-      return res.status(400).json({ error: 'Invalid parameters' });
-    }
-    const subjectCode = subject.toUpperCase();
-    const catalog = await fetchCatalogEntry(term, subjectCode, course);
-    res.json({ count: catalog.length, entries: catalog, source: 'live' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch catalog entry' });
-  }
-});
 
 
 // --- API Endpoints ---
@@ -473,9 +578,33 @@ app.get("/course-details/:term/:crn", async (req, res) => {
     if (!term || !/^\d{6}$/.test(term) || !crn || !/^\d{5}$/.test(crn)) {
       return res.status(400).json({ error: "Invalid term or CRN." });
     }
+
+    // 1. Fetch live details (especially seat counts) from the detail page
     const details = await fetchCourseDetails(term, crn);
-    if (!details) return res.status(404).json({ error: "Course details unavailable." });
+    if (!details) {
+      return res.status(404).json({ error: "Course details unavailable." });
+    }
+
+    // 2. Now, try to find the instructor from our cached data, since the
+    //    detail page doesn't provide it.
+    if (details.subject) {
+      const cacheKey = `courses_${term}_${details.subject.toUpperCase()}`;
+      const cachedCourses = await getFromCache(db, cacheKey);
+
+      if (cachedCourses) {
+        const cachedCourseInfo = cachedCourses.find(c => c.crn === crn);
+        
+        if (cachedCourseInfo) {
+          // 3. Merge the cached instructor/schedule into our live details
+          details.instructor = cachedCourseInfo.instructor;
+          details.schedule = cachedCourseInfo.schedule;
+          details.courseName = cachedCourseInfo.courseName; // Also grab the better-parsed name
+        }
+      }
+    }
+
     res.json(details);
+    
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch course details." });

@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalBody = document.getElementById('modal-body');
   const darkToggle = document.getElementById('dark-toggle');
   const root = document.documentElement;
+  const staticCloseButton = document.querySelector('#details-modal .close-button');
+  if (staticCloseButton) {
+    staticCloseButton.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+  }
 
   // --- RMP config ---
   const RMP_SCHOOL_ID = '14046';
@@ -327,146 +333,153 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function displayCourses(courses) {
-    if (!coursesContainer) return;
-    coursesContainer.innerHTML = '';
-    if (!courses.length) {
-      coursesContainer.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No courses found.</p>`;
-      return;
-    }
+  if (!coursesContainer) return;
+  coursesContainer.innerHTML = '';
+  if (!courses.length) {
+    coursesContainer.innerHTML = `<p class="text-gray-600 dark:text-gray-400">No courses found.</p>`;
+    return;
+  }
 
-    courses.forEach(course => {
-      const courseNumber = getCourseNumber(course);
-      const crn = course.crn;
-      const scheduleInfo = (course.schedule || []).map(s => {
-        const where = (s.where || '').toUpperCase();
-        const locationEmoji = where.includes('ONLINE') ? '💻 Online' : '🏫 In-person';
-        const days = s.days || 'TBA';
+  courses.forEach(course => {
+    const courseNumber = getCourseNumber(course);
+    const crn = course.crn;
+    const scheduleInfo = (course.schedule || [])
+      .map(s => {
         const time = s.time || 'TBA';
-        return `<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400"><span>🗓️ ${days} ${time}</span><span>${locationEmoji}</span></div>`;
-      }).join('');
+        const days = s.days || 'TBA';
+        const where = s.where || 'TBA';
+        return `<div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><span>🗓️</span> <span>${days} | ${time} | ${where}</span></div>`;
+      })
+      .join('');
+    const type = getCourseType(course);
+    const typeBadge = {
+        online: '<span class="px-2 py-1 text-xs font-medium text-blue-800 bg-blue-100 rounded-full dark:bg-blue-900 dark:text-blue-300">Online</span>',
+        inperson: '<span class="px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-300">In-Person</span>',
+        hybrid: '<span class="px-2 py-1 text-xs font-medium text-purple-800 bg-purple-100 rounded-full dark:bg-purple-900 dark:text-purple-300">Hybrid</span>',
+        unknown: ''
+    }[type];
+    const instructorDisplay = course.instructor || extractInstructorFrom(course) || 'TBA';
+    const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
+    const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="text-red-500 hover:underline text-xs ml-1" title="View on RateMyProfessors">⭐</a>` : '';
+    const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === String(crn));
+    const isWatching = watchedCourseObjects.some(c => String(c.crn) === String(crn));
 
-      const type = getCourseType(course);
-      const typeBadge = {
-        online: '<span class="px-2 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-white">Online</span>',
-        inperson: '<span class="px-2 py-1 rounded-full text-xs bg-green-100 dark:bg-green-700 text-green-800 dark:text-white">In-person</span>',
-        hybrid: '<span class="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-700 text-amber-800 dark:text-white">Hybrid</span>',
-        unknown: '<span class="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white">TBA</span>'
-      }[type];
-
-      const instructorDisplay = course.instructor || extractInstructorFrom(course) || 'TBA';
-      const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
-
-      const rmpSmallLinkHTML = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" title="View on RateMyProfessors" class="ml-2 inline-flex items-center justify-center w-6 h-6 rounded text-red-600 dark:text-red-400">⭐</a>` : '';
-      
-      const isBookmarked = bookmarkedCourses.some(c => String(c.crn) === String(crn));
-      const isWatching = watchedCourseObjects.some(c => String(c.crn) === String(crn));
-
-      const card = document.createElement('div');
-      card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
-      card.innerHTML = `
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div class="flex justify-between items-start gap-2">
-            <div>
-              <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">${course.subjectCode} ${courseNumber}</h3>
-              <p class="text-sm text-gray-600 dark:text-gray-300">${course.courseName}</p>
-            </div>
-            <div class="text-right">
-                ${typeBadge}
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">CRN: ${crn}</p>
-            </div>
+    const card = document.createElement('div');
+    card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col';
+    card.innerHTML = `
+      <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">${course.subjectCode} ${courseNumber}</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300">${course.courseName}</p>
+          </div>
+          <div class="text-right">
+              ${typeBadge}
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">CRN: ${crn}</p>
           </div>
         </div>
+      </div>
 
-        <div class="p-4 space-y-3 flex-grow">
-          <div class="flex items-center gap-2 text-sm">
-            <span>👨‍🏫</span>
-            <span class="font-medium truncate" style="max-width:260px">${instructorDisplay}</span>
-            ${rmpSmallLinkHTML}
-          </div>
-          ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
+      <div class="p-4 space-y-3 flex-grow">
+        <div class="flex items-center gap-2 text-sm">
+          <span>👨‍🏫</span>
+          <span class="font-medium truncate" style="max-width:260px">${instructorDisplay}</span>
+          ${rmpSmallLinkHTML}
         </div>
+        ${scheduleInfo || '<div class="text-sm text-gray-500">Schedule: TBA</div>'}
+      </div>
 
-        <div id="seat-wrapper-${crn}" class="px-4 pb-4">
-            <div id="seat-label-${crn}" class="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-              <span>Loading seats...</span>
-              <span id="seat-label-right-${crn}" class="text-xs"></span>
-            </div>
-            <div class="w-full h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <div id="seat-bar-${crn}" class="h-3 rounded-full bg-gray-400" style="width:0%"></div>
-              <div id="seat-overlay-${crn}" class="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-gray-800 dark:text-gray-100 pointer-events-none"></div>
-            </div>
-        </div>
-
-        <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex gap-2 justify-between items-center">
-          <div class="flex-1 mr-2">
-            <button class="details-btn w-full px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm" data-term="${termSelect ? termSelect.value : ''}" data-crn="${crn}">Details</button>
+      <div id="seat-wrapper-${crn}" class="px-4 pb-4">
+          <div id="seat-label-${crn}" class="text-xs text-gray-600 dark:text-gray-400 mb-1">Loading seats...</div>
+          <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 relative">
+              <div id="seat-bar-${crn}" class="h-3 rounded-full transition-all duration-500 bg-gray-400" style="width: 0%;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+              <div id="seat-overlay-${crn}" class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white text-shadow-sm"></div>
           </div>
-          <div class="flex gap-2 items-center">
-            <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm">Sign Up</a>
+      </div>
 
-            <div class="flex items-center gap-1">
-              <button class="bookmark-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${isBookmarked ? 'bg-yellow-500' : 'bg-gray-400'}" data-crn="${crn}" title="Bookmark">${isBookmarked ? '★' : '☆'}</button>
-              <button class="watch-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md text-white text-sm ${isWatching ? 'bg-sky-500' : 'bg-gray-400'}" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="${isWatching ? 'Watching' : 'Watch'}">👁</button>
-              <button class="copy-crn-btn min-w-[44px] w-11 h-9 px-0 py-1.5 rounded-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" title="Copy CRN" data-crn="${crn}">📋</button>
-            </div>
-          </div>
+      <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-b-xl flex gap-2 justify-between items-center">
+        <button class="details-btn flex-1 px-3 py-1 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors" data-crn="${crn}">Details</button>
+        <div class="flex gap-2">
+          <button class="bookmark-btn w-9 h-8 rounded-md ${isBookmarked ? 'bg-yellow-500' : 'bg-gray-400'} text-white text-lg hover:brightness-110 transition" data-crn="${crn}" title="Bookmark">
+              ${isBookmarked ? '★' : '☆'}
+          </button>
+          <button class="watch-btn w-9 h-8 rounded-md ${isWatching ? 'bg-sky-500' : 'bg-gray-400'} text-white text-lg flex items-center justify-center hover:brightness-110 transition" data-crn="${crn}" data-term="${termSelect ? termSelect.value : ''}" title="${isWatching ? 'Watching' : 'Watch'}" aria-pressed="${isWatching}">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+          </button>
+          <button class="copy-crn-btn w-9 h-8 rounded-md bg-gray-400 text-white text-lg flex items-center justify-center hover:brightness-110 transition" data-crn="${crn}" title="Copy CRN" aria-label="Copy CRN">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path></svg>
+          </button>
         </div>
-      `;
-      coursesContainer.appendChild(card);
+      </div>
+    `;
+    coursesContainer.appendChild(card);
 
-      if (course.seats && (course.seats.capacity || course.seats.actual || course.seats.remaining)) {
-        const capacity = parseSeatValue(course.seats.capacity);
-        const actual = parseSeatValue(course.seats.actual);
-        const remaining = typeof course.seats.remaining === 'number' ? course.seats.remaining : parseSeatValue(course.seats.remaining);
-        updateSeatUI(crn, capacity, actual, remaining);
-      } else {
-        const selectedTerm = termSelect ? termSelect.value : '';
-        if (selectedTerm) {
-          fetch(`/course-details/${selectedTerm}/${crn}`)
-            .then(r => {
-              if (!r.ok) throw new Error('No details');
-              return r.json();
-            })
-            .then(details => {
-              if (!details || !details.seats) {
-                const label = document.getElementById(`seat-label-${crn}`);
-                const overlay = document.getElementById(`seat-overlay-${crn}`);
-                if (label) label.textContent = 'Seats: N/A';
-                if (overlay) overlay.textContent = '';
-                return;
-              }
-              const capacity = parseSeatValue(details.seats.capacity);
-              const actual = parseSeatValue(details.seats.actual);
-              let remaining = parseSeatValue(details.seats.remaining);
-              if (isNaN(remaining)) remaining = (isNaN(capacity) || isNaN(actual)) ? 0 : (capacity - actual);
-              updateSeatUI(crn, capacity, actual, remaining);
-            })
-            .catch(() => {
+    if (course.seats && (course.seats.capacity || course.seats.actual || course.seats.remaining)) {
+      const capacity = parseSeatValue(course.seats.capacity);
+      const actual = parseSeatValue(course.seats.actual);
+      const remaining = typeof course.seats.remaining === 'number' ? course.seats.remaining : parseSeatValue(course.seats.remaining);
+      updateSeatUI(crn, capacity, actual, remaining);
+    } else {
+      const selectedTerm = termSelect ? termSelect.value : '';
+      if (selectedTerm) {
+        fetch(`/course-details/${selectedTerm}/${crn}`)
+          .then(r => {
+            if (!r.ok) throw new Error('No details');
+            return r.json();
+          })
+          .then(details => {
+            if (!details || !details.seats) {
               const label = document.getElementById(`seat-label-${crn}`);
               const overlay = document.getElementById(`seat-overlay-${crn}`);
               if (label) label.textContent = 'Seats: N/A';
               if (overlay) overlay.textContent = '';
-            });
-        } else {
-          const label = document.getElementById(`seat-label-${crn}`);
-          const overlay = document.getElementById(`seat-overlay-${crn}`);
-          if (label) label.textContent = 'Seats: N/A';
-          if (overlay) overlay.textContent = '';
-        }
+              return;
+            }
+            const capacity = parseSeatValue(details.seats.capacity);
+            const actual = parseSeatValue(details.seats.actual);
+            let remaining = parseSeatValue(details.seats.remaining);
+            if (isNaN(remaining)) remaining = (isNaN(capacity) || isNaN(actual)) ? 0 : (capacity - actual);
+            updateSeatUI(crn, capacity, actual, remaining);
+          })
+          .catch(() => {
+            const label = document.getElementById(`seat-label-${crn}`);
+            const overlay = document.getElementById(`seat-overlay-${crn}`);
+            if (label) label.textContent = 'Seats: N/A';
+            if (overlay) overlay.textContent = '';
+          });
+      } else {
+        const label = document.getElementById(`seat-label-${crn}`);
+        const overlay = document.getElementById(`seat-overlay-${crn}`);
+        if (label) label.textContent = 'Seats: N/A';
+        if (overlay) overlay.textContent = '';
       }
-    });
-  }
+    }
+  });
+}
 
   // --- Event delegation in course list ---
-  if (coursesContainer) {
+ // --- Event delegation in course list ---
+if (coursesContainer) {
     coursesContainer.addEventListener('click', e => {
-      const target = e.target;
-      if (target.classList.contains('details-btn')) fetchCourseDetails(termSelect ? termSelect.value : '', target.dataset.crn);
-      if (target.classList.contains('bookmark-btn')) toggleBookmark(target);
-      if (target.classList.contains('watch-btn')) toggleWatch(target);
-      if (target.classList.contains('copy-crn-btn')) handleCopyButton(target);
+        const detailsBtn = e.target.closest('.details-btn');
+        const bookmarkBtn = e.target.closest('.bookmark-btn');
+        const watchBtn = e.target.closest('.watch-btn');
+        const copyBtn = e.target.closest('.copy-crn-btn');
+
+        if (detailsBtn) {
+            fetchCourseDetails(termSelect ? termSelect.value : '', detailsBtn.dataset.crn);
+        }
+        if (bookmarkBtn) {
+            toggleBookmark(bookmarkBtn);
+        }
+        if (watchBtn) {
+            toggleWatch(watchBtn);
+        }
+        if (copyBtn) {
+            handleCopyButton(copyBtn);
+        }
     });
-  }
+}
 
   // --- Bookmark / Watch functions ---
   function toggleBookmark(button) {
@@ -527,18 +540,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Copy CRN ---
-  function handleCopyButton(button) {
-    const crn = button.dataset.crn || (button.closest('div') ? (button.closest('div').querySelector('[data-crn]') ? button.closest('div').querySelector('[data-crn]').dataset.crn : null) : null);
+  // --- Copy CRN ---
+function handleCopyButton(button) {
+    const crn = button.dataset.crn;
     if (!crn) {
-      alert('CRN not found to copy.');
-      return;
+        alert('CRN not found to copy.');
+        return;
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(crn).then(() => showCopyFeedback(button), () => fallbackCopy(crn, button));
+        navigator.clipboard.writeText(crn).then(() => showCopyFeedback(button), () => fallbackCopy(crn, button));
     } else {
-      fallbackCopy(crn, button);
+        fallbackCopy(crn, button);
     }
-  }
+}
   function showCopyFeedback(button) {
     button.classList.add('ring-2', 'ring-green-400');
     button.setAttribute('aria-label', 'Copied');
@@ -564,98 +578,176 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Modal ---
- // --- Modal ---
-  function fetchCourseDetails(term, crn) {
-    if (!modalBody || !modal) return;
-    modalBody.innerHTML = '<div class="text-center py-6">Loading...</div>';
-    modalTitle.textContent = '';
-    modal.classList.remove('hidden');
+// Replace the existing fetchCourseDetails with this
+async function fetchCourseDetails(term, crn) {
+  if (!modalBody || !modal) return;
+  modalBody.innerHTML = '<div class="text-center py-6">Loading...</div>';
+  modalTitle.textContent = '';
+  modal.classList.remove('hidden');
 
-    // Find the full course object from our local list to get its subject and number
-    const course = allCourses.find(c => String(c.crn) === String(crn));
-    if (!course) {
-        modalBody.innerHTML = '<p class="text-red-600">Could not find course data to fetch details.</p>';
-        return;
+  // 1. Get the course data we already have from the main list.
+  const localCourse = allCourses.find(c => String(c.crn) === String(crn)) || {};
+
+  // 2. Fetch fresh, live details from the server.
+  let liveDetails = {};
+  try {
+    const res = await fetch(`/course-details/${term}/${crn}`);
+    if (res.ok) {
+      liveDetails = await res.json() || {};
     }
-    const courseNumber = getCourseNumber(course);
-    
-    // --- Create two promises: one for seat details, one for catalog entry ---
-    const detailsPromise = fetch(`/course-details/${term}/${crn}`).then(res => {
-        if (!res.ok) return {}; // Return empty object on failure to not break Promise.all
-        return res.json();
-    });
-
-    const catalogPromise = fetch(`/catalog/${term}/${course.subjectCode}/${courseNumber}`).then(res => {
-        if (!res.ok) return { entries: [] }; // Return empty structure on failure
-        return res.json();
-    });
-
-    // --- Wait for both promises to resolve ---
-    Promise.all([detailsPromise, catalogPromise])
-      .then(([details, catalogData]) => {
-        // Pass BOTH results to the display function
-        displayCourseDetails(details, catalogData);
-      })
-      .catch(() => {
-        modalBody.innerHTML = '<p class="text-red-600">Error loading course details.</p>';
-      });
+  } catch (err) {
+    console.warn(`Could not fetch live details for CRN ${crn}. Using local data.`, err);
   }
-  ffunction displayCourseDetails(details, catalogData) {
-    modalTitle.textContent = details.title || details.courseName || 'Course Details';
 
-    // --- 1. Build the new Catalog Details section ---
-    let catalogHtml = '';
-    const catalogEntry = catalogData?.entries?.[0]; // Get the first entry from the catalog data
+  // 3. Merge local and live data. Properties from liveDetails will overwrite localCourse.
+  const finalDetails = { ...localCourse, ...liveDetails };
 
-    if (catalogEntry) {
-        catalogHtml = `
-        <div class="mb-4 p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg space-y-3">
-            ${catalogEntry.description ? `
-            <div>
-                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Description</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.description}</p>
-            </div>` : ''}
-            
-            ${catalogEntry.prerequisites ? `
-            <div>
-                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Prerequisites</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.prerequisites}</p>
-            </div>` : ''}
+  // 4. *** INSTRUCTOR CORRECTION LOGIC ***
+  // Check if the instructor from the merged data is unhelpful (TBA, Staff, empty).
+  const finalInstructor = extractInstructorFrom(finalDetails);
+  const isFinalInstructorBad = !finalInstructor || /^(?:TBA|STAFF)$/i.test(finalInstructor);
 
-            ${catalogEntry.corequisites ? `
-            <div>
-                <h4 class="font-semibold text-gray-800 dark:text-gray-200">Corequisites</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">${catalogEntry.corequisites}</p>
-            </div>` : ''}
-        </div>
-        `;
+  // If the final instructor is bad, check if we had a better one locally.
+  if (isFinalInstructorBad) {
+    const localInstructor = extractInstructorFrom(localCourse);
+    const isLocalInstructorGood = localInstructor && !/^(?:TBA|STAFF)$/i.test(localInstructor);
+
+    // If the local one was good, restore its instructor fields to our final object.
+    if (isLocalInstructorGood) {
+      finalDetails.instructor = localCourse.instructor;
+      finalDetails.instructors = localCourse.instructors;
     }
+  }
 
-    // --- 2. Build the existing details sections (seats, instructor, etc.) ---
-    const instructorDisplay = extractInstructorFrom(details) || 'TBA';
-    const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
-    const rmpLink = hasInstructor ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg inline-block ml-2">⭐ Rate Instructor</a>` : '';
-    const seats = details.seats?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg"><p class="font-semibold">Seats</p><p>Total: ${details.seats.capacity}</p><p>Taken: ${details.seats.actual}</p><p>Remaining: ${details.seats.remaining}</p></div>` : '<p>Seats info not available</p>';
-    const waitlist = details.waitlist?.capacity ? `<div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg"><p class="font-semibold">Waitlist</p><p>Total: ${details.waitlist.capacity}</p><p>Taken: ${details.waitlist.actual}</p><p>Remaining: ${details.waitlist.remaining}</p></div>` : '<p>Waitlist info not available</p>';
-    
-    // --- 3. Combine everything into the final modal body ---
-    modalBody.innerHTML = `
-      ${catalogHtml} 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  // 5. Now, display the modal using the corrected finalDetails object.
+  displayCourseDetails(finalDetails);
+}
+
+// Replace the existing displayCourseDetails function with this simplified version
+// app.js
+function displayCourseDetails(details) {
+  const instructorDisplay = extractInstructorFrom(details) || 'TBA';
+  const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
+  const rmpLink = hasInstructor
+  ? `<a href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer" 
+       class="inline-block px-2 py-0.5 text-xs font-semibold text-red-700 bg-red-100 rounded-full hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800 transition-colors whitespace-nowrap"
+       title="View on RateMyProfessors">RMP ⭐</a>`
+  : '';
+
+  const catalogEntry = details.catalog;
+
+  modalTitle.textContent = details.title || details.courseName || 'Course Details';
+  modalBody.innerHTML = `
+    <div class="relative">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center p-3 bg-slate-100 dark:bg-slate-800 rounded-lg mb-4">
         <div>
-          <p><span class="font-semibold">Term:</span> ${details.associatedTerm || 'N/A'}</p>
-          <p><span class="font-semibold">Levels:</span> ${details.levels || 'N/A'}</p>
-          <p><span class="font-semibold">Credits:</span> ${details.credits || 'N/A'}</p>
-          <p class="mt-2"><span class="font-semibold">Instructor:</span> ${instructorDisplay || 'TBA'} ${hasInstructor ? `<a class="text-sm text-red-600 dark:text-red-400 ml-1" href="${rmpUrlFor(instructorDisplay)}" target="_blank" rel="noreferrer">View on RMP</a>` : ''}</p>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Credits</div>
+          <div class="text-lg font-bold text-slate-800 dark:text-slate-100">${details.credits || catalogEntry?.credits || 'N/A'}</div>
         </div>
-        <div class="flex gap-2 flex-col">${seats}${waitlist}</div>
+        <div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Term</div>
+          <div class="text-lg font-bold text-slate-800 dark:text-slate-100">${details.associatedTerm ? details.associatedTerm.split(' ')[0] : 'N/A'}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Level</div>
+          <div class="text-lg font-bold text-slate-800 dark:text-slate-100">${details.levels || 'N/A'}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Instructor</div>
+          <div class="flex items-baseline justify-center gap-2 pt-1 flex-wrap">
+            <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">${instructorDisplay}</span>
+            ${rmpLink}
+          </div>
+          </div>
       </div>
-      <div class="mt-4 flex gap-2">
-        <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg inline-block">📝 Sign Up in OASIS</a>
-        ${rmpLink}
+
+      <div class="border-b border-slate-200 dark:border-slate-700 mb-3">
+        <nav class="flex space-x-3" aria-label="Tabs">
+          <button class="tab-btn active-tab px-4 py-2 rounded-t-md bg-indigo-600 text-white font-medium transition" data-tab="description">Description</button>
+          <button class="tab-btn px-4 py-2 rounded-t-md hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium" data-tab="requirements">Requirements</button>
+          <button class="tab-btn px-4 py-2 rounded-t-md hover:bg-indigo-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium" data-tab="availability">Availability</button>
+        </nav>
       </div>
-    `;
+
+      <div class="py-2">
+        <div id="tab-content-description" class="tab-content space-y-3">
+          ${catalogEntry?.description
+            ? `<p class="text-slate-600 dark:text-slate-300">${catalogEntry.description}</p>`
+            : '<p class="text-slate-500 italic">No description available.</p>'}
+        </div>
+
+        <div id="tab-content-requirements" class="tab-content hidden space-y-4">
+          ${(catalogEntry?.prerequisites || catalogEntry?.corequisites || catalogEntry?.attributes?.length > 0) ? `
+            ${catalogEntry.prerequisites ? `<div><h4 class="font-semibold text-slate-800 dark:text-slate-200">Prerequisites</h4><p class="text-sm text-slate-600 dark:text-slate-400">${catalogEntry.prerequisites}</p></div>` : ''}
+            ${catalogEntry.corequisites ? `<div><h4 class="font-semibold text-slate-800 dark:text-slate-200">Corequisites</h4><p class="text-sm text-slate-600 dark:text-slate-400">${catalogEntry.corequisites}</p></div>` : ''}
+            ${(catalogEntry.attributes && catalogEntry.attributes.length > 0) ? `<div><h4 class="font-semibold text-slate-800 dark:text-slate-200">Attributes</h4><div class="flex flex-wrap gap-2 mt-1">${catalogEntry.attributes.map(attr => `<span class="px-2 py-1 text-xs bg-indigo-100 dark:bg-slate-700 text-indigo-800 dark:text-slate-200 rounded-md">${attr}</span>`).join('')}</div></div>` : ''}
+          ` : '<p class="text-slate-500 italic">No specific requirements listed.</p>'}
+        </div>
+
+        <div id="tab-content-availability" class="tab-content hidden">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
+              <h4 class="font-semibold text-slate-800 dark:text-slate-200 mb-2">Seats</h4>
+              ${details.seats?.capacity ? `
+                <dl class="space-y-1 text-sm">
+                  <div class="flex justify-between"><dt class="text-slate-500">Capacity</dt><dd class="font-mono text-slate-700 dark:text-slate-300">${details.seats.capacity}</dd></div>
+                  <div class="flex justify-between"><dt class="text-slate-500">Actual</dt><dd class="font-mono text-slate-700 dark:text-slate-300">${details.seats.actual}</dd></div>
+                  <div class="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700"><dt class="font-medium text-slate-600 dark:text-slate-400">Remaining</dt><dd class="font-mono font-bold text-indigo-600 dark:text-indigo-400">${details.seats.remaining}</dd></div>
+                </dl>
+              ` : '<p class="text-slate-500 text-sm italic">Seat information not available.</p>'}
+            </div>
+
+            <div class="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
+              <h4 class="font-semibold text-slate-800 dark:text-slate-200 mb-2">Waitlist</h4>
+              ${details.waitlist?.capacity ? `
+                <dl class="space-y-1 text-sm">
+                  <div class="flex justify-between"><dt class="text-slate-500">Capacity</dt><dd class="font-mono text-slate-700 dark:text-slate-300">${details.waitlist.capacity}</dd></div>
+                  <div class="flex justify-between"><dt class="text-slate-500">Actual</dt><dd class="font-mono text-slate-700 dark:text-slate-300">${details.waitlist.actual}</dd></div>
+                  <div class="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700"><dt class="font-medium text-slate-600 dark:text-slate-400">Remaining</dt><dd class="font-mono font-bold text-indigo-600 dark:text-indigo-400">${details.waitlist.remaining}</dd></div>
+                </dl>
+              ` : '<p class="text-slate-500 text-sm italic">No waitlist for this course.</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+        <a href="https://oasis.farmingdale.edu/pls/prod/twbkwbis.P_WWWLogin" target="_blank" rel="noopener noreferrer" class="block w-full text-center px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors">
+          Register on Oasis
+        </a>
+        <p class="text-xs text-center text-slate-500 dark:text-slate-400 mt-2">
+          You will need the CRN: <strong class="font-mono text-slate-700 dark:text-slate-200">${details.crn || 'N/A'}</strong>. The CRN has been copied for you.
+        </p>
+      </div>
+      </div>
+  `;
+
+  // --- ADDED: Auto-copy CRN to clipboard ---
+  if (navigator.clipboard && details.crn) {
+    navigator.clipboard.writeText(details.crn).catch(() => {});
   }
+
+  // --- Tab functionality ---
+  const tabButtons = modalBody.querySelectorAll('.tab-btn');
+  const tabContents = modalBody.querySelectorAll('.tab-content');
+
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      tabButtons.forEach(btn => {
+        btn.classList.remove('active-tab', 'bg-indigo-600', 'text-white');
+        btn.classList.add('hover:bg-indigo-100', 'dark:hover:bg-slate-700', 'text-slate-700', 'dark:text-slate-200');
+      });
+      tabContents.forEach(content => content.classList.add('hidden'));
+
+      button.classList.add('active-tab', 'bg-indigo-600', 'text-white');
+      button.classList.remove('hover:bg-indigo-100', 'dark:hover:bg-slate-700', 'text-slate-700', 'dark:text-slate-200');
+      document.getElementById(`tab-content-${button.dataset.tab}`).classList.remove('hidden');
+    });
+  });
+}
+
+
+
 			
   // --- Options panel list populate ---
   function populateOptionsList(list, type) {
