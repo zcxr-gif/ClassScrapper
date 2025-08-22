@@ -1,4 +1,4 @@
-// app.js (updated: fixed block order, reliable per-subject hex colors, rebuild schedule on bookmark)
+// app.js (updated: with debugger for colors)
 document.addEventListener('DOMContentLoaded', () => {
   const termSelect = document.getElementById('term-select');
   const subjectSelect = document.getElementById('subject-select');
@@ -988,6 +988,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const section = course.section ? String(course.section) : '';
           const subj = course.subjectCode || '';
           const hex = subjectHexMap[subj] || '#6b7280'; // fallback gray
+          
+          // DEBUGGER LINE
+          console.log(`Course: ${course.courseName}, Subject: '${subj}', Color: ${hex}`);
+
           const textColor = textColorForHex(hex);
 
           const block = document.createElement('div');
@@ -1029,7 +1033,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const minForThreeLines = 36;
           if (boundedHeight < minForThreeLines) {
             thirdLine.style.display = 'none';
-            if (boundedHeight < 24) secondLine.style.display = 'none';
+            // --- FIX FOR UNREADABLE TEXT ---
+            if (boundedHeight < 24) {
+                secondLine.style.display = 'none';
+                firstLine.style.fontSize = '10px'; // Make font smaller
+                firstLine.style.lineHeight = '1.1'; // Adjust line height
+                block.style.padding = '3px 6px';   // Reduce padding
+            }
           }
 
           // conflict detection
