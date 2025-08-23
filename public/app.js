@@ -638,8 +638,6 @@ async function fetchCourseDetails(term, crn) {
   displayCourseDetails(finalDetails);
 }
 
-// Replace the existing displayCourseDetails function with this simplified version
-// app.js
 function displayCourseDetails(details) {
   const instructorDisplay = extractInstructorFrom(details) || 'TBA';
   const hasInstructor = instructorDisplay && !/TBA/i.test(instructorDisplay);
@@ -653,7 +651,7 @@ function displayCourseDetails(details) {
 
   modalTitle.textContent = details.title || details.courseName || 'Course Details';
   modalBody.innerHTML = `
-    <div class="relative">
+    <div class="relative max-h-[65vh] overflow-y-auto -mr-3 pr-3">
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center p-3 bg-slate-100 dark:bg-slate-800 rounded-lg mb-4">
         <div>
           <div class="text-xs text-slate-500 dark:text-slate-400">Credits</div>
@@ -762,9 +760,6 @@ function displayCourseDetails(details) {
 }
 
 
-
-			
-  // --- Options panel list populate ---
   // --- Options panel list populate ---
   function populateOptionsList(list, type) {
     optionsList.innerHTML = '';
